@@ -525,6 +525,7 @@ if __name__ == '__main__':
 ```
 
 The `logging_redirect_tldm()` context manager redirects console logging to `tldm.write()`, leaving other logging handlers (e.g., log files) unaffected. It automatically:
+
 - Removes console handlers (stdout/stderr) from loggers
 - Adds a `TldmLoggingHandler` that writes via `tldm.write()`
 - Preserves formatters and log levels from the original console handlers
@@ -547,6 +548,7 @@ if __name__ == '__main__':
 ```
 
 **Parameters:**
+
 - `loggers`: List of loggers to redirect (default: `[logging.root]`)
 - `tldm_class`: Progress bar class to use (default: `tldm.std.tldm`)
 
