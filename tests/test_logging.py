@@ -1,5 +1,3 @@
-# pylint: disable=missing-module-docstring, missing-class-docstring
-# pylint: disable=missing-function-docstring, no-self-use
 import logging
 import logging.handlers
 import sys
@@ -25,7 +23,7 @@ class CustomTqdm(tldm):
     messages = []
 
     @classmethod
-    def write(cls, s, **__):  # pylint: disable=arguments-differ
+    def write(cls, s, **__):
         CustomTqdm.messages.append(s)
 
 
@@ -33,7 +31,7 @@ class ErrorRaisingTqdm(tldm):
     exception_class = RuntimeError
 
     @classmethod
-    def write(cls, s, **__):  # pylint: disable=arguments-differ
+    def write(cls, s, **__):
         raise ErrorRaisingTqdm.exception_class("fail fast")
 
 
