@@ -18,7 +18,7 @@ help:
 
 mypy:
 	@echo "Running mypy type checking..."
-	uv run mypy src/tldm/std.py src/tldm/utils.py src/tldm/aliases.py
+	uv run mypy src/tldm/std.py src/tldm/utils.py src/tldm/aliases.py src/tldm/logging.py
 
 ruff-format:
 	@echo "Running ruff formatter..."

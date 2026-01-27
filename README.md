@@ -45,6 +45,7 @@ Works across all major platforms (Linux, Windows, macOS) and in all major enviro
   - [Pandas Integration](#pandas-integration)
   - [Rich Integration](#rich-integration)
   - [Concurrent Processing](#concurrent-processing)
+  - [Logging Integration](#logging-integration)
 - [Advanced Usage](#advanced-usage)
   - [Description and Postfix](#description-and-postfix)
   - [Nested Progress Bars](#nested-progress-bars)
@@ -502,6 +503,54 @@ results = thread_map(lambda x: x**2, range(100), max_workers=4)
 # Process-based parallel processing with progress bar
 results = process_map(lambda x: x**2, range(100), max_workers=4)
 ```
+
+### Logging Integration
+
+Redirect console logging output to work seamlessly with tldm progress bars. This prevents log messages from interfering with progress bar display:
+
+```python
+import logging
+from tldm import trange
+from tldm.logging import logging_redirect_tldm
+
+LOG = logging.getLogger(__name__)
+
+if __name__ == '__main__':
+    logging.basicConfig(level=logging.INFO)
+    with logging_redirect_tldm():
+        for i in trange(9):
+            if i == 4:
+                LOG.info("console logging redirected to `tldm.write()`")
+    # logging restored
+```
+
+The `logging_redirect_tldm()` context manager redirects console logging to `tldm.write()`, leaving other logging handlers (e.g., log files) unaffected. It automatically:
+
+- Removes console handlers (stdout/stderr) from loggers
+- Adds a `TldmLoggingHandler` that writes via `tldm.write()`
+- Preserves formatters and log levels from the original console handlers
+- Restores original handlers when exiting the context
+
+You can also combine progress bars with logging redirection using `tldm_logging_redirect()`:
+
+```python
+import logging
+from tldm.logging import tldm_logging_redirect
+
+LOG = logging.getLogger(__name__)
+
+if __name__ == '__main__':
+    logging.basicConfig(level=logging.INFO)
+    with tldm_logging_redirect(total=10) as pbar:
+        for i in range(10):
+            LOG.info(f"Processing item {i}")
+            pbar.update(1)
+```
+
+**Parameters:**
+
+- `loggers`: List of loggers to redirect (default: `[logging.root]`)
+- `tldm_class`: Progress bar class to use (default: `tldm.std.tldm`)
 
 ---
 

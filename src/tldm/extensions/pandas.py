@@ -42,53 +42,14 @@ def tldm_pandas(**tldm_kwargs: dict[str, Any]) -> None:
     <https://stackoverflow.com/questions/18603270/\
     progress-indicator-during-pandas-operations-python>
     """
-    from warnings import catch_warnings, simplefilter
-
     from pandas.core.frame import DataFrame
+    from pandas.core.groupby.generic import DataFrameGroupBy, SeriesGroupBy
+    from pandas.core.groupby.groupby import GroupBy
     from pandas.core.series import Series
+    from pandas.core.window.expanding import Expanding
+    from pandas.core.window.rolling import Rolling
 
-    try:
-        with catch_warnings():
-            simplefilter("ignore", category=FutureWarning)
-            from pandas import Panel
-    except ImportError:  # pandas>=1.2.0
-        Panel = None
-    Rolling, Expanding = None, None
-    try:  # pandas>=1.0.0
-        from pandas.core.window.rolling import _Rolling_and_Expanding
-    except ImportError:
-        try:  # pandas>=0.18.0
-            from pandas.core.window import _Rolling_and_Expanding
-        except ImportError:  # pandas>=1.2.0
-            try:  # pandas>=1.2.0
-                from pandas.core.window.expanding import Expanding
-                from pandas.core.window.rolling import Rolling
-
-                _Rolling_and_Expanding = Rolling, Expanding
-            except ImportError:  # pragma: no cover
-                _Rolling_and_Expanding = None
-    try:  # pandas>=0.25.0
-        from pandas.core.groupby.generic import (
-            DataFrameGroupBy,
-            SeriesGroupBy,  # , NDFrameGroupBy
-        )
-    except ImportError:  # pragma: no cover
-        try:  # pandas>=0.23.0
-            from pandas.core.groupby.groupby import DataFrameGroupBy, SeriesGroupBy
-        except ImportError:
-            from pandas.core.groupby import DataFrameGroupBy, SeriesGroupBy
-    try:  # pandas>=0.23.0
-        from pandas.core.groupby.groupby import GroupBy
-    except ImportError:  # pragma: no cover
-        from pandas.core.groupby import GroupBy
-
-    try:  # pandas>=0.23.0
-        from pandas.core.groupby.groupby import PanelGroupBy
-    except ImportError:
-        try:
-            from pandas.core.groupby import PanelGroupBy
-        except ImportError:  # pandas>=0.25.0
-            PanelGroupBy = None
+    _Rolling_and_Expanding = (Rolling, Expanding)
 
     tldm_kwargs = tldm_kwargs.copy()
 
@@ -125,10 +86,8 @@ def tldm_pandas(**tldm_kwargs: dict[str, Any]) -> None:
             # Init bar
             t = std_tldm(total=total, **tldm_kwargs)
 
-            try:  # pandas>=1.3.0
-                from pandas.core.common import is_builtin_func
-            except ImportError:
-                is_builtin_func = df._is_builtin_func
+            from pandas.core.common import is_builtin_func
+
             with contextlib.suppress(TypeError):
                 func = is_builtin_func(func)
 
@@ -163,17 +122,9 @@ def tldm_pandas(**tldm_kwargs: dict[str, Any]) -> None:
     DataFrame.progress_map = inner_generator("map")
     DataFrameGroupBy.progress_map = inner_generator("map")
 
-    if Panel is not None:
-        Panel.progress_apply = inner_generator()
-    if PanelGroupBy is not None:
-        PanelGroupBy.progress_apply = inner_generator()
-
     GroupBy.progress_apply = inner_generator()
     GroupBy.progress_aggregate = inner_generator("aggregate")
     GroupBy.progress_transform = inner_generator("transform")
 
-    if Rolling is not None and Expanding is not None:
-        Rolling.progress_apply = inner_generator()
-        Expanding.progress_apply = inner_generator()
-    elif _Rolling_and_Expanding is not None:
-        _Rolling_and_Expanding.progress_apply = inner_generator()
+    Rolling.progress_apply = inner_generator()
+    Expanding.progress_apply = inner_generator()
