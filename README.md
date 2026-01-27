@@ -1,6 +1,7 @@
 # TL;DM
 
 [![PyPI version](https://badge.fury.io/py/tldm.svg)](https://badge.fury.io/py/tldm)
+![PyPI - Python Version](https://img.shields.io/pypi/pyversions/tldm)
 [![Project Status: Active – The project has reached a stable, usable state and is being actively developed.](https://www.repostatus.org/badges/latest/active.svg)](https://www.repostatus.org/#active)
 [![tests](https://github.com/eliotwrobson/tldm/actions/workflows/test.yml/badge.svg)](https://github.com/eliotwrobson/tldm/actions/workflows/test.yml)
 [![lint](https://github.com/eliotwrobson/tldm/actions/workflows/check.yml/badge.svg)](https://github.com/eliotwrobson/tldm/actions/workflows/check.yml)
