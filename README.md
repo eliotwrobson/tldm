@@ -460,14 +460,16 @@ with tldm_asyncio(range(100)) as pbar:
 
 ### Pandas Integration
 
-Apply tldm to pandas operations:
+Apply tldm to pandas operations. There are multiple ways to register the pandas integration:
+
+**Using the syntactic sugar (recommended):**
 
 ```python
 import pandas as pd
 import numpy as np
 from tldm import tldm
 
-# Register pandas integration
+# Register pandas integration - simple and clean!
 tldm.pandas(desc="Processing")
 
 df = pd.DataFrame(np.random.randint(0, 100, (1000, 6)))
@@ -478,6 +480,29 @@ df.progress_apply(lambda x: x**2)
 # Also works with groupby
 df.groupby(0).progress_apply(lambda x: x**2)
 ```
+
+**Alternative import style:**
+
+```python
+from tldm import pandas
+
+# Register with default settings
+pandas()
+
+# Or with custom parameters
+pandas(desc="Processing", ncols=80)
+```
+
+**Traditional import (also supported):**
+
+```python
+from tldm.extensions.pandas import tldm_pandas
+
+# Register pandas integration
+tldm_pandas(desc="Processing")
+```
+
+The pandas integration automatically uses the appropriate progress bar for your environment (terminal or Jupyter notebook).
 
 ### Rich Integration
 

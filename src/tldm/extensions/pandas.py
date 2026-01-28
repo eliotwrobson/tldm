@@ -29,11 +29,17 @@ def tldm_pandas(**tldm_kwargs: dict[str, Any]) -> None:
     --------
     >>> import pandas as pd
     >>> import numpy as np
-    >>> from tldm import tldm, tldm_pandas
-    >>> from tldm.gui import tldm as tldm_gui
+    >>> from tldm import tldm
     >>>
     >>> df = pd.DataFrame(np.random.randint(0, 100, (100000, 6)))
-    >>> tldm_pandas(ncols=50)  # can use tldm_gui, optional kwargs, etc
+    >>>
+    >>> # Recommended: Use syntactic sugar
+    >>> tldm.pandas(ncols=50)
+    >>>
+    >>> # Alternative: Direct import
+    >>> from tldm.extensions.pandas import tldm_pandas
+    >>> tldm_pandas(ncols=50)
+    >>>
     >>> # Now you can use `progress_apply` instead of `apply`
     >>> df.groupby(0).progress_apply(lambda x: x**2)
 
