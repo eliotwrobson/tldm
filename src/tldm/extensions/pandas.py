@@ -86,10 +86,17 @@ def tldm_pandas(**tldm_kwargs: dict[str, Any]) -> None:
             # Init bar
             t = auto_tldm(total=total, **tldm_kwargs)
 
-            from pandas.core.common import is_builtin_func
+            # Try to use pandas' is_builtin_func if available (optimization)
+            # This was removed in pandas 3.0, so we need to handle both cases
+            try:
+                from pandas.core.common import is_builtin_func
 
-            with contextlib.suppress(TypeError):
-                func = is_builtin_func(func)
+                with contextlib.suppress(TypeError):
+                    func = is_builtin_func(func)
+            except ImportError:
+                # pandas >= 3.0 removed is_builtin_func
+                # We can safely skip this optimization
+                pass
 
             # Define bar updating wrapper
             def wrapper(*args, **kwargs):

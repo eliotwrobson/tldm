@@ -240,3 +240,37 @@ def test_pandas_syntactic_sugar():
         assert "Sugar Test" in output
         assert "100%" in output
         assert "3/3" in output  # 3 columns
+
+
+def test_pandas_compatibility_without_is_builtin_func():
+    """Test pandas extension works without is_builtin_func (pandas 3.0+)"""
+    import sys
+    from unittest.mock import patch
+
+    with closing(StringIO()) as our_file:
+        # Simulate pandas 3.0 where is_builtin_func doesn't exist
+        with patch.dict(sys.modules):
+            # Force ImportError when trying to import is_builtin_func
+            if "pandas.core.common" in sys.modules:
+                original_module = sys.modules["pandas.core.common"]
+                # Create a mock that raises ImportError for is_builtin_func
+                import importlib
+
+                mock_common = importlib.import_module("pandas.core.common")
+                if hasattr(mock_common, "is_builtin_func"):
+                    delattr(mock_common, "is_builtin_func")
+
+            # Re-register pandas to use the patched version
+            tldm_pandas(file=our_file, leave=True, ascii=True)
+
+            # Test that it still works without is_builtin_func
+            series = pd.Series(randint(0, 50, (100,)))
+            res1 = series.progress_apply(lambda x: x * 2)
+            res2 = series.apply(lambda x: x * 2)
+            assert res1.equals(res2)
+
+            # Verify progress was displayed
+            our_file.seek(0)
+            output = our_file.getvalue()
+            assert "100%" in output
+            assert "100/100" in output
