@@ -193,3 +193,83 @@ def test_pandas_leave():
         if exres not in our_file.read():
             our_file.seek(0)
             raise AssertionError(f"\nExpected:\n{exres}\nIn:{our_file.read()}\n")
+
+
+def test_pandas_auto_alias():
+    """Test that pandas extension uses auto_tldm"""
+    from tldm.aliases import auto_tldm
+    from tldm.std import tldm as std_tldm
+
+    # Verify auto_tldm is being used in terminal environment
+    # In terminal, auto_tldm should resolve to std_tldm
+    assert auto_tldm == std_tldm
+
+    with closing(StringIO()) as our_file:
+        # Register pandas with auto-detected tldm
+        tldm_pandas(file=our_file, leave=True, ascii=True)
+
+        # Test that progress_apply works with auto alias
+        series = pd.Series(randint(0, 50, (100,)))
+        res1 = series.progress_apply(lambda x: x * 2)
+        res2 = series.apply(lambda x: x * 2)
+        assert res1.equals(res2)
+
+        # Verify progress was displayed
+        our_file.seek(0)
+        output = our_file.getvalue()
+        assert "100%" in output
+        assert "100/100" in output
+
+
+def test_pandas_syntactic_sugar():
+    """Test syntactic sugar import for pandas"""
+    import tldm
+
+    with closing(StringIO()) as our_file:
+        # Use the syntactic sugar function
+        tldm.pandas(file=our_file, leave=True, ascii=True, desc="Sugar Test")
+
+        df = pd.DataFrame(randint(0, 50, (50, 3)))
+        res1 = df.progress_apply(lambda x: x + 1)
+        res2 = df.apply(lambda x: x + 1)
+        assert res1.equals(res2)
+
+        # Verify progress was displayed with custom description
+        our_file.seek(0)
+        output = our_file.getvalue()
+        assert "Sugar Test" in output
+        assert "100%" in output
+        assert "3/3" in output  # 3 columns
+
+
+def test_pandas_compatibility_without_is_builtin_func():
+    """Test pandas extension works without is_builtin_func (pandas 3.0+)"""
+    import sys
+    from unittest.mock import patch
+
+    with closing(StringIO()) as our_file:
+        # Simulate pandas 3.0 where is_builtin_func doesn't exist
+        with patch.dict(sys.modules):
+            # Force ImportError when trying to import is_builtin_func
+            if "pandas.core.common" in sys.modules:
+                # Create a mock that raises ImportError for is_builtin_func
+                import importlib
+
+                mock_common = importlib.import_module("pandas.core.common")
+                if hasattr(mock_common, "is_builtin_func"):
+                    delattr(mock_common, "is_builtin_func")
+
+            # Re-register pandas to use the patched version
+            tldm_pandas(file=our_file, leave=True, ascii=True)
+
+            # Test that it still works without is_builtin_func
+            series = pd.Series(randint(0, 50, (100,)))
+            res1 = series.progress_apply(lambda x: x * 2)
+            res2 = series.apply(lambda x: x * 2)
+            assert res1.equals(res2)
+
+            # Verify progress was displayed
+            our_file.seek(0)
+            output = our_file.getvalue()
+            assert "100%" in output
+            assert "100/100" in output

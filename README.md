@@ -6,7 +6,6 @@
 [![tests](https://github.com/eliotwrobson/tldm/actions/workflows/test.yml/badge.svg)](https://github.com/eliotwrobson/tldm/actions/workflows/test.yml)
 [![lint](https://github.com/eliotwrobson/tldm/actions/workflows/check.yml/badge.svg)](https://github.com/eliotwrobson/tldm/actions/workflows/check.yml)
 [![License: MPL 2.0](https://img.shields.io/badge/License-MPL_2.0-brightgreen.svg)](https://opensource.org/licenses/MPL-2.0)
-[![Project Status: Active – The project has reached a stable, usable state and is being actively developed.](https://www.repostatus.org/badges/latest/active.svg)](https://www.repostatus.org/#active)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![Checked with mypy](http://www.mypy-lang.org/static/mypy_badge.svg)](http://mypy-lang.org/)
 
@@ -370,9 +369,23 @@ Reset the progress bar to 0 iterations for repeated use.
 
 ## Convenience Functions
 
+All convenience functions use automatic environment detection by default, displaying notebook widgets in Jupyter/IPython environments and standard terminal output otherwise.
+
+### `auto_tldm`
+
+An alias that automatically selects between `tldm.notebook.tldm` (for Jupyter/IPython) and the standard `tldm.std.tldm` (for terminals). This is used internally by all convenience functions.
+
+```python
+from tldm import auto_tldm
+
+# Works seamlessly in both notebooks and terminals
+for i in auto_tldm(range(100)):
+    pass
+```
+
 ### `trange(*args, **kwargs)`
 
-Shortcut for `tldm(range(*args), **kwargs)`.
+Shortcut for `auto_tldm(range(*args), **kwargs)`.
 
 ```python
 from tldm import trange
@@ -381,9 +394,11 @@ for i in trange(100):
     pass
 ```
 
-### `tenumerate(iterable, start=0, total=None, tldm_class=tldm, **tldm_kwargs)`
+### `tenumerate(iterable, start=0, total=None, tldm_class=None, **tldm_kwargs)`
 
 Equivalent of builtin `enumerate` with a progress bar.
+
+**Note:** By default, `tldm_class` is automatically detected (`auto_tldm`) and will use notebook widgets in Jupyter/IPython or standard terminal output otherwise.
 
 ```python
 from tldm import tenumerate
@@ -394,7 +409,7 @@ for i, item in tenumerate(['a', 'b', 'c']):
 
 ### `tzip(iter1, *iter2plus, **tldm_kwargs)`
 
-Equivalent of builtin `zip` with a progress bar.
+Equivalent of builtin `zip` with a progress bar. Accepts optional `tldm_class` in kwargs (defaults to `auto_tldm`).
 
 ```python
 from tldm import tzip
@@ -405,7 +420,7 @@ for a, b in tzip(range(100), range(100, 200)):
 
 ### `tmap(function, *sequences, **tldm_kwargs)`
 
-Equivalent of builtin `map` with a progress bar.
+Equivalent of builtin `map` with a progress bar. Accepts optional `tldm_class` in kwargs (defaults to `auto_tldm`).
 
 ```python
 from tldm import tmap
@@ -415,7 +430,7 @@ results = list(tmap(lambda x: x**2, range(100)))
 
 ### `tproduct(*iterables, **tldm_kwargs)`
 
-Equivalent of `itertools.product` with a progress bar.
+Equivalent of `itertools.product` with a progress bar. Accepts optional `tldm_class` in kwargs (defaults to `auto_tldm`).
 
 ```python
 from tldm import tproduct
@@ -460,14 +475,16 @@ with tldm_asyncio(range(100)) as pbar:
 
 ### Pandas Integration
 
-Apply tldm to pandas operations:
+Apply tldm to pandas operations. There are multiple ways to register the pandas integration:
+
+**Using the syntactic sugar (recommended):**
 
 ```python
 import pandas as pd
 import numpy as np
 from tldm import tldm
 
-# Register pandas integration
+# Register pandas integration - simple and clean!
 tldm.pandas(desc="Processing")
 
 df = pd.DataFrame(np.random.randint(0, 100, (1000, 6)))
@@ -478,6 +495,29 @@ df.progress_apply(lambda x: x**2)
 # Also works with groupby
 df.groupby(0).progress_apply(lambda x: x**2)
 ```
+
+**Alternative import style:**
+
+```python
+from tldm import pandas
+
+# Register with default settings
+pandas()
+
+# Or with custom parameters
+pandas(desc="Processing", ncols=80)
+```
+
+**Traditional import (also supported):**
+
+```python
+from tldm.extensions.pandas import tldm_pandas
+
+# Register pandas integration
+tldm_pandas(desc="Processing")
+```
+
+The pandas integration automatically uses the appropriate progress bar for your environment (terminal or Jupyter notebook).
 
 ### Rich Integration
 

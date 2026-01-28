@@ -5,7 +5,7 @@ Registration for `tldm` to provide `pandas` progress indicators.
 import contextlib
 from typing import Any
 
-from ..std import tldm as std_tldm
+from ..aliases import auto_tldm
 
 
 def tldm_pandas(**tldm_kwargs: dict[str, Any]) -> None:
@@ -29,11 +29,17 @@ def tldm_pandas(**tldm_kwargs: dict[str, Any]) -> None:
     --------
     >>> import pandas as pd
     >>> import numpy as np
-    >>> from tldm import tldm, tldm_pandas
-    >>> from tldm.gui import tldm as tldm_gui
+    >>> from tldm import tldm
     >>>
     >>> df = pd.DataFrame(np.random.randint(0, 100, (100000, 6)))
-    >>> tldm_pandas(ncols=50)  # can use tldm_gui, optional kwargs, etc
+    >>>
+    >>> # Recommended: Use syntactic sugar
+    >>> tldm.pandas(ncols=50)
+    >>>
+    >>> # Alternative: Direct import
+    >>> from tldm.extensions.pandas import tldm_pandas
+    >>> tldm_pandas(ncols=50)
+    >>>
     >>> # Now you can use `progress_apply` instead of `apply`
     >>> df.groupby(0).progress_apply(lambda x: x**2)
 
@@ -84,12 +90,19 @@ def tldm_pandas(**tldm_kwargs: dict[str, Any]) -> None:
                     total = df.size // df.shape[axis]
 
             # Init bar
-            t = std_tldm(total=total, **tldm_kwargs)
+            t = auto_tldm(total=total, **tldm_kwargs)
 
-            from pandas.core.common import is_builtin_func
+            # Try to use pandas' is_builtin_func if available (optimization)
+            # This was removed in pandas 3.0, so we need to handle both cases
+            try:
+                from pandas.core.common import is_builtin_func
 
-            with contextlib.suppress(TypeError):
-                func = is_builtin_func(func)
+                with contextlib.suppress(TypeError):
+                    func = is_builtin_func(func)
+            except ImportError:
+                # pandas >= 3.0 removed is_builtin_func
+                # We can safely skip this optimization
+                pass
 
             # Define bar updating wrapper
             def wrapper(*args, **kwargs):
