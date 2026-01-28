@@ -252,7 +252,6 @@ def test_pandas_compatibility_without_is_builtin_func():
         with patch.dict(sys.modules):
             # Force ImportError when trying to import is_builtin_func
             if "pandas.core.common" in sys.modules:
-                original_module = sys.modules["pandas.core.common"]
                 # Create a mock that raises ImportError for is_builtin_func
                 import importlib
 
