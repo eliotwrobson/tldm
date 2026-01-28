@@ -32,7 +32,7 @@ def _get_auto_tldm() -> type[tldm]:
     """
     try:
         # Try to detect IPython/Jupyter notebook environment
-        get_ipython = sys.modules["IPython"].get_ipython  # type: ignore[attr-defined]
+        get_ipython = sys.modules["IPython"].get_ipython
         if "IPKernelApp" not in get_ipython().config:  # pragma: no cover
             raise ImportError("console")
 
@@ -43,7 +43,7 @@ def _get_auto_tldm() -> type[tldm]:
         from .std import TldmWarning
 
         try:
-            from .notebook import IProgress  # type: ignore[attr-defined]
+            from .notebook import IProgress
         except ImportError:
             IProgress = None
 
@@ -54,7 +54,7 @@ def _get_auto_tldm() -> type[tldm]:
         # Use notebook version
         from .notebook import tldm as notebook_tldm
 
-        return notebook_tldm  # type: ignore[return-value]
+        return notebook_tldm
     except Exception:
         # Fallback to standard tldm
         return tldm
