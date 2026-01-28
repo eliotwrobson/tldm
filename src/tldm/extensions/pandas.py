@@ -5,7 +5,7 @@ Registration for `tldm` to provide `pandas` progress indicators.
 import contextlib
 from typing import Any
 
-from ..std import tldm as std_tldm
+from ..aliases import auto_tldm
 
 
 def tldm_pandas(**tldm_kwargs: dict[str, Any]) -> None:
@@ -84,7 +84,7 @@ def tldm_pandas(**tldm_kwargs: dict[str, Any]) -> None:
                     total = df.size // df.shape[axis]
 
             # Init bar
-            t = std_tldm(total=total, **tldm_kwargs)
+            t = auto_tldm(total=total, **tldm_kwargs)
 
             from pandas.core.common import is_builtin_func
 
