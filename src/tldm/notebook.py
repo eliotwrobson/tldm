@@ -16,15 +16,15 @@ from .std import tldm as std_tldm
 
 try:
     from IPython.display import clear_output, display
-    from ipywidgets import HTML, HBox, VBox
+    from ipywidgets import HTML, HBox, VBox  # type: ignore[import-not-found]
     from ipywidgets import FloatProgress as IProgress
 
     clear_output(wait=False)  # Necessary when rerunning cells
 except ImportError:
-    IProgress = None  # type: ignore[assignment, misc]
-    HBox = object  # type: ignore[assignment, misc]
-    VBox = object  # type: ignore[assignment, misc]
-    HTML = None  # type: ignore[assignment]
+    IProgress = None
+    HBox = object
+    VBox = object
+    HTML = None
     display = None  # type: ignore[assignment]
 
 
@@ -35,14 +35,14 @@ WARN_NOIPYW = (
 )
 
 
-class TldmHBox(HBox):  # type: ignore[misc]
+class TldmHBox(HBox):
     """`ipywidgets.HBox` with a pretty representation"""
 
     def _json_(self, pretty: bool | None = None) -> dict[str, Any]:
         pbar = getattr(self, "pbar", None)
         if pbar is None:
             return {}
-        d = pbar.format_dict
+        d: dict[str, Any] = pbar.format_dict
         if pretty is not None:
             d["ascii"] = not pretty
         return d
@@ -50,8 +50,9 @@ class TldmHBox(HBox):  # type: ignore[misc]
     def __repr__(self, pretty: bool = False) -> str:
         pbar = getattr(self, "pbar", None)
         if pbar is None:
-            return super().__repr__()
-        return pbar.format_meter(**self._json_(pretty))
+            return str(super().__repr__())
+        # pbar.format_meter returns Any, cast to str
+        return str(pbar.format_meter(**self._json_(pretty)))
 
     def _repr_pretty_(self, pp: Any, *_: Any, **__: Any) -> None:
         pp.text(self.__repr__(True))
@@ -85,15 +86,15 @@ class tldm_notebook(std_tldm):
         if IProgress is None:  # #187 #451 #558 #872
             raise ImportError(WARN_NOIPYW)
         if total:
-            pbar = IProgress(min=0, max=total)  # type: ignore[misc]
+            pbar = IProgress(min=0, max=total)
         else:  # No total? Show info style bar with no progress tldm status
-            pbar = IProgress(min=0, max=1)  # type: ignore[misc]
+            pbar = IProgress(min=0, max=1)
             pbar.bar_style = "info"
             if ncols is None:
                 pbar.layout.width = "20px"
 
-        ltext = HTML()  # type: ignore[misc]
-        rtext = HTML()  # type: ignore[misc]
+        ltext = HTML()
+        rtext = HTML()
         if desc:
             ltext.value = desc
         container = TldmHBox(children=[ltext, pbar, rtext])
@@ -132,7 +133,8 @@ class tldm_notebook(std_tldm):
             d["bar_format"] = (d["bar_format"] or "{l_bar}<bar/>{r_bar}").replace(
                 "{bar}", "<bar/>"
             )
-            msg = self.format_meter(**d)  # type: ignore[attr-defined]
+            # format_meter is inherited from std_tldm
+            msg = str(super().format_meter(**d))  # type: ignore[misc]
 
         ltext, pbar, rtext = self.container.children
         pbar.max = self.total
@@ -175,15 +177,16 @@ class tldm_notebook(std_tldm):
         if check_delay and self.delay > 0 and not self.displayed:
             tldm_notebook.outer_container.children += (self.container,)
             if abs(self.pos) == 0:
-                display(tldm_notebook.outer_container)  # type: ignore[misc]
-            self.displayed = True
+                display(tldm_notebook.outer_container)
+            self.displayed: bool = True
 
         return False
 
     @property
     def colour(self) -> str | None:
         if hasattr(self, "container"):
-            return self.container.children[-2].style.bar_color
+            result: str | None = self.container.children[-2].style.bar_color
+            return result
         return None
 
     @colour.setter
@@ -218,7 +221,8 @@ class tldm_notebook(std_tldm):
             return
 
         # Get bar width
-        self.ncols = "100%" if self.dynamic_ncols else kwargs.get("ncols", None)  # type: ignore[attr-defined]
+        # Note: We allow str here for notebook compatibility even though parent expects int | None
+        self.ncols = "100%" if self.dynamic_ncols else kwargs.get("ncols", None)  # type: ignore[assignment,attr-defined]
 
         # Replace with IPython progress bar display (with correct total)
 
@@ -234,9 +238,9 @@ class tldm_notebook(std_tldm):
         if display_here and self.delay <= 0:
             tldm_notebook.outer_container.children += (self.container,)
             if abs(self.pos) == 0:
-                display(tldm_notebook.outer_container)  # type: ignore[misc]
+                display(tldm_notebook.outer_container)
             self.displayed = True
-        self.disp = self.display
+        self.disp = self.display  # type: ignore[assignment]
         self.colour = colour
 
         # Print initial bar state
