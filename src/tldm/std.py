@@ -573,6 +573,36 @@ class tldm(Generic[T]):
         return bool(self.iterable)
 
     def __len__(self) -> int:
+        """Return exact length if available, otherwise raise TypeError.
+
+        Only returns a value when the wrapped iterable has an actual __len__
+        or numpy shape. Does NOT fall back to __length_hint__ or total since
+        those are estimates and using them for __len__ causes problems with
+        downstream consumers that rely on __len__ being accurate.
+
+        See: https://github.com/tqdm/tqdm/issues/1652
+        """
+        if hasattr(self.iterable, "shape"):
+            return int(self.iterable.shape[0])  # type: ignore[union-attr]
+        elif hasattr(self.iterable, "__len__"):
+            return int(len(self.iterable))  # type: ignore[arg-type]
+        raise TypeError(
+            f"object of type '{type(self).__name__}' has no len() "
+            "(wrapped iterable has no __len__; use __length_hint__ for estimates)"
+        )
+
+    def __length_hint__(self) -> int:
+        """Return estimated length (PEP 424).
+
+        Returns the best available estimate of the length, which may come from:
+        1. The wrapped iterable's shape (numpy arrays)
+        2. The wrapped iterable's __len__
+        3. The wrapped iterable's __length_hint__
+        4. The total parameter
+
+        This is appropriate for optimization hints but should not be relied
+        upon for correctness. Use __len__ when exact length is required.
+        """
         if hasattr(self.iterable, "shape"):
             return int(self.iterable.shape[0])  # type: ignore[union-attr]
         elif hasattr(self.iterable, "__len__"):
@@ -581,7 +611,6 @@ class tldm(Generic[T]):
             return int(length_hint(self.iterable))
         elif self.total is not None:
             return int(self.total)
-
         return 0
 
     def __reversed__(self) -> Self:

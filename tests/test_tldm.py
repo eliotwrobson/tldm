@@ -11,7 +11,7 @@ from io import (
 )
 from warnings import catch_warnings, simplefilter
 
-from pytest import importorskip, mark
+from pytest import importorskip, mark, raises
 
 from tldm import tldm, trange
 from tldm.utils import ObjectWrapper, TldmWarning, format_interval
@@ -835,10 +835,13 @@ def test_ascii() -> None:
 
 def test_update() -> None:
     """Test manual creation and updates"""
+    from operator import length_hint
+
     res = None
     with closing(StringIO()) as our_file:
         with tldm(total=2, file=our_file, miniters=1, mininterval=0) as progressbar:
-            assert len(progressbar) == 2
+            # Use length_hint for estimated/expected length (issue #1652)
+            assert length_hint(progressbar) == 2
             progressbar.update(2)
             assert "| 2/2" in our_file.getvalue()
             progressbar.desc = "dynamically notify of 4 increments in total"
@@ -1735,6 +1738,90 @@ def test_len() -> None:
     np = importorskip("numpy")
     with closing(StringIO()) as f, tldm(np.zeros((3, 4)), file=f) as t:
         assert len(t) == 3
+
+
+def test_len_with_list() -> None:
+    """Test __len__ with a list (has actual __len__)"""
+    with closing(StringIO()) as f, tldm([1, 2, 3, 4, 5], file=f) as t:
+        assert len(t) == 5
+
+
+def test_len_not_from_total() -> None:
+    """Test that __len__ does NOT use total parameter (issue #1652)
+
+    The `total` parameter is described as "expected iterations" and can be
+    an estimate. Using it for __len__ causes problems with downstream
+    consumers that rely on __len__ being accurate (e.g., toolz.partition_all).
+    """
+
+    def make_n(n):
+        """Generator with no __len__"""
+        for i in range(n):
+            yield i
+
+    with closing(StringIO()) as f:
+        # Generator has no __len__, total is just an estimate
+        with tldm(make_n(5), total=7, file=f) as t:
+            # __len__ should raise TypeError, not return 7
+            with raises(TypeError):
+                len(t)
+
+
+def test_len_not_from_length_hint() -> None:
+    """Test that __len__ does NOT use __length_hint__ (issue #1652)
+
+    __length_hint__ (PEP 424) is specifically for estimates and should not
+    be conflated with __len__ which must be accurate.
+    """
+
+    class IterableWithLengthHint:
+        """Iterable with __length_hint__ but no __len__"""
+
+        def __init__(self, n):
+            self.n = n
+            self.i = 0
+
+        def __iter__(self):
+            return self
+
+        def __next__(self):
+            if self.i >= self.n:
+                raise StopIteration
+            self.i += 1
+            return self.i
+
+        def __length_hint__(self):
+            return 100  # Estimate, not exact
+
+    with closing(StringIO()) as f:
+        with tldm(IterableWithLengthHint(5), file=f) as t:
+            # __len__ should raise TypeError, not return 100
+            with raises(TypeError):
+                len(t)
+
+
+def test_length_hint() -> None:
+    """Test that __length_hint__ returns estimated length
+
+    tldm should provide __length_hint__ for cases where only an estimate
+    is available (from total parameter or wrapped iterable's __length_hint__).
+    """
+    from operator import length_hint
+
+    def make_n(n):
+        """Generator with no __len__"""
+        for i in range(n):
+            yield i
+
+    # Test with total parameter
+    with closing(StringIO()) as f:
+        t = tldm(make_n(5), total=7, file=f)
+        assert length_hint(t) == 7
+
+    # Test with list (has __len__, so length_hint should also work)
+    with closing(StringIO()) as f:
+        t = tldm([1, 2, 3], file=f)
+        assert length_hint(t) == 3
 
 
 def test_autodisable_disable() -> None:
