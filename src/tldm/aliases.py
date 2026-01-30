@@ -11,6 +11,7 @@ __all__ = [
     "tzip",
     "tmap",
     "tproduct",
+    "tbatched",
     "trange",
     "auto_tldm",
 ]
@@ -139,6 +140,91 @@ def tproduct(*iterables: Iterable[T], **tldm_kwargs: Any) -> Iterator[tuple[T, .
         it = itertools.product(*iterables, repeat=repeat)
         for val in it:
             yield val
+            t.update()
+
+
+def tbatched(
+    iterable: Iterable[T],
+    n: int,
+    *,
+    strict: bool = False,
+    total: int | float | None = None,
+    tldm_class: type[tldm] | None = None,
+    **tldm_kwargs: Any,
+) -> Iterator[tuple[T, ...]]:
+    """
+    Equivalent of `itertools.batched` (Python 3.12+) with progress bar.
+
+    Yields tuples of up to `n` elements from the iterable, with progress
+    tracked per batch rather than per item.
+
+    Parameters
+    ----------
+    iterable : Iterable[T]
+        The iterable to batch.
+    n : int
+        The batch size (maximum number of elements per batch).
+    strict : bool, optional
+        If True, raises ValueError if the final batch has fewer than n elements.
+        Requires Python 3.13+. Default: False.
+    total : int | float | None, optional
+        Total number of items in the iterable (used to calculate number of batches).
+        If not provided and iterable has __len__, it will be used.
+    tldm_class : type[tldm] | None, optional
+        The tldm class to use. Default: auto_tldm (automatically detected).
+    **tldm_kwargs : Any
+        Additional keyword arguments to pass to tldm.
+
+    Yields
+    ------
+    tuple[T, ...]
+        Tuples of up to n elements from the iterable.
+
+    Examples
+    --------
+    >>> from tldm import tbatched
+    >>> for batch in tbatched(range(10), 3):
+    ...     print(batch)
+    (0, 1, 2)
+    (3, 4, 5)
+    (6, 7, 8)
+    (9,)
+
+    See Also
+    --------
+    itertools.batched : The standard library equivalent (Python 3.12+).
+    https://github.com/tqdm/tqdm/issues/1615 : Original feature request.
+    """
+    import sys
+
+    if sys.version_info < (3, 12):
+        raise ImportError("tbatched requires Python 3.12+ (itertools.batched)")
+
+    tldm_class = tldm_class or auto_tldm
+
+    # Calculate total number of batches
+    if total is None:
+        try:
+            total_items = length_hint(iterable)
+            total_batches = (total_items + n - 1) // n if total_items else None
+        except TypeError:
+            total_batches = None
+    else:
+        total_batches = (int(total) + n - 1) // n
+
+    tldm_kwargs.setdefault("total", total_batches)
+
+    # Use itertools.batched with appropriate arguments
+    if sys.version_info >= (3, 13):
+        batched_iter = itertools.batched(iterable, n, strict=strict)
+    elif strict:
+        raise ValueError("strict parameter requires Python 3.13+")
+    else:
+        batched_iter = itertools.batched(iterable, n)
+
+    with tldm_class(**tldm_kwargs) as t:
+        for batch in batched_iter:
+            yield batch
             t.update()
 
 

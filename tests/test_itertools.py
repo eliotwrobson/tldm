@@ -3,12 +3,13 @@ Tests for `tldm.contrib.itertools`.
 """
 
 import itertools as it
+import sys
 from contextlib import closing
 from io import StringIO
 
 import pytest
 
-from tldm.aliases import tenumerate, tmap, tproduct, tzip
+from tldm.aliases import tbatched, tenumerate, tmap, tproduct, tzip
 from tldm.std import tldm
 
 
@@ -72,3 +73,57 @@ def test_map(tldm_kwargs):
         gen = tmap(lambda x: x + 1, a, file=our_file, **tldm_kwargs)
         assert gen != b
         assert list(gen) == b
+
+
+# Only test batched on Python 3.12+ where itertools.batched exists
+@pytest.mark.skipif(sys.version_info < (3, 12), reason="itertools.batched requires Python 3.12+")
+@pytest.mark.parametrize("tldm_kwargs", [{}, {"tldm_class": tldm}])
+def test_batched(tldm_kwargs):
+    """Test contrib.tbatched - basic functionality, progress display, generators, and total"""
+    # Basic functionality
+    with closing(StringIO()) as our_file:
+        a = range(10)
+        result = list(tbatched(a, 3, file=our_file, **tldm_kwargs))
+        expected = list(it.batched(a, 3))
+        assert result == expected
+        assert len(result) == 4  # (0,1,2), (3,4,5), (6,7,8), (9,)
+
+    # Progress display shows batch count, not item count
+    with closing(StringIO()) as our_file:
+        result = list(
+            tbatched(range(100), 10, file=our_file, leave=True, ascii=True, **tldm_kwargs)
+        )
+        assert len(result) == 10
+        output = our_file.getvalue()
+        assert "10/10" in output and "100%" in output
+
+    # Generator without __len__
+    def gen():
+        yield from range(10)
+
+    with closing(StringIO()) as our_file:
+        result = list(tbatched(gen(), 3, file=our_file, **tldm_kwargs))
+        assert result == [(0, 1, 2), (3, 4, 5), (6, 7, 8), (9,)]
+
+    # Generator with explicit total
+    with closing(StringIO()) as our_file:
+        result = list(
+            tbatched(gen(), 3, total=10, file=our_file, leave=True, ascii=True, **tldm_kwargs)
+        )
+        assert result == [(0, 1, 2), (3, 4, 5), (6, 7, 8), (9,)]
+        assert "4/4" in our_file.getvalue()
+
+
+@pytest.mark.skipif(sys.version_info < (3, 13), reason="strict parameter requires Python 3.13+")
+@pytest.mark.parametrize("tldm_kwargs", [{}, {"tldm_class": tldm}])
+def test_batched_strict(tldm_kwargs):
+    """Test contrib.tbatched with strict=True (Python 3.13+)"""
+    with closing(StringIO()) as our_file:
+        # strict=True should raise if last batch is incomplete
+        with pytest.raises(ValueError):
+            list(tbatched(range(10), 3, strict=True, file=our_file, **tldm_kwargs))
+
+        # strict=True should work if batches are complete
+        result = list(tbatched(range(9), 3, strict=True, file=our_file, **tldm_kwargs))
+        expected = list(it.batched(range(9), 3, strict=True))
+        assert result == expected

@@ -2,6 +2,7 @@ from importlib.metadata import version
 
 from ._monitor import TMonitor as TMonitor
 from .aliases import auto_tldm as auto_tldm
+from .aliases import tbatched as tbatched
 from .aliases import tenumerate as tenumerate
 from .aliases import tmap as tmap
 from .aliases import tproduct as tproduct
