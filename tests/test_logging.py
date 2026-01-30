@@ -120,6 +120,22 @@ class TestRedirectLoggingToTldm:
         with logging_redirect_tldm(loggers=[logger]):
             assert logger.handlers[0].level == level
 
+    def test_should_inherit_console_logger_filters(self):
+        """Test that filters are preserved during logging redirect (issue #1581)"""
+
+        class TestFilter(logging.Filter):
+            def filter(self, record):
+                record.msg = f"{record.msg} -- filtered"
+                return True
+
+        logger = logging.Logger("test")
+        console_handler = logging.StreamHandler(sys.stderr)
+        test_filter = TestFilter()
+        console_handler.addFilter(test_filter)
+        logger.handlers = [console_handler]
+        with logging_redirect_tldm(loggers=[logger]):
+            assert test_filter in logger.handlers[0].filters
+
     def test_should_not_remove_stream_handlers_not_for_stdout_or_stderr(self):
         logger = logging.Logger("test")
         stream_handler = logging.StreamHandler(StringIO())

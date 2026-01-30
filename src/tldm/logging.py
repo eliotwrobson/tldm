@@ -90,6 +90,9 @@ def logging_redirect_tldm(
                 tldm_handler.setFormatter(orig_handler.formatter)
                 tldm_handler.setLevel(orig_handler.level)
                 tldm_handler.stream = orig_handler.stream
+                # Copy filters from original handler (issue #1581)
+                for f in orig_handler.filters:
+                    tldm_handler.addFilter(f)
             logger.handlers = [
                 handler for handler in logger.handlers if not _is_console_logging_handler(handler)
             ] + [tldm_handler]
