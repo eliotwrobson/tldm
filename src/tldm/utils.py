@@ -528,15 +528,16 @@ def format_interval(t: float) -> str:
     out  : str
         [[Dd ]H:]MM:SS
     """
-    mins, s = divmod(int(t), 60)
+    sign = "-" if t < 0 else ""
+    mins, s = divmod(abs(int(t)), 60)
     h, m = divmod(mins, 60)
     days, h = divmod(h, 24)
     if days:
-        return f"{days:d}d {h:d}:{m:02d}:{s:02d}"
+        return f"{sign}{days:d}d {h:d}:{m:02d}:{s:02d}"
     elif h:
-        return f"{h:d}:{m:02d}:{s:02d}"
+        return f"{sign}{h:d}:{m:02d}:{s:02d}"
     else:
-        return f"{m:02d}:{s:02d}"
+        return f"{sign}{m:02d}:{s:02d}"
 
 
 def format_num(n: numbers.Real) -> str:
