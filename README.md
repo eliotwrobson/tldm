@@ -332,9 +332,9 @@ with trange(10) as t:
         sleep(0.1)
 ```
 
-### `print(*values, file=sys.stdout, sep=" ", end="\n")`
+### `print(*values, file=sys.stdout, sep=" ", end="\n", flush=False)`
 
-Print messages via tldm without overlapping with the progress bar. This works like the builtin `print()` function and is the recommended way to print messages.
+Print messages via tldm without overlapping with the progress bar. This works like the builtin `print()` function and is the recommended way to print messages. Supports all standard print arguments including `flush`.
 
 ```python
 from tldm import tldm
@@ -347,7 +347,7 @@ for i in tldm(range(10)):
     sleep(0.1)
 ```
 
-### `write(s, file=sys.stdout, end="\n")`
+### `write(s, file=sys.stdout, end="\n", flush=False)`
 
 Print a single string via tldm without overlapping with the progress bar. For most use cases, `tldm.print()` is more convenient.
 
@@ -437,6 +437,20 @@ from tldm import tproduct
 
 for combo in tproduct(range(10), range(10)):
     pass
+```
+
+### `tbatched(iterable, n, *, strict=False, total=None, tldm_class=None, **tldm_kwargs)`
+
+Equivalent of `itertools.batched` (Python 3.12+) with a progress bar. Yields successive batches of size `n` from the iterable.
+
+**Note:** Requires Python 3.12 or later (when `itertools.batched` was added).
+
+```python
+from tldm import tbatched
+
+# Process items in batches of 3 with progress bar
+for batch in tbatched(range(10), 3):
+    print(batch)  # [0, 1, 2], [3, 4, 5], [6, 7, 8], [9]
 ```
 
 ---
@@ -813,7 +827,7 @@ for i in bar:
         tldm.print(f"Done task {i}")
 ```
 
-The `tldm.print()` function works just like the builtin `print()`, accepting multiple values and standard keyword arguments like `sep`, `end`, and `file`.
+The `tldm.print()` function works just like the builtin `print()`, accepting multiple values and standard keyword arguments like `sep`, `end`, `file`, and `flush`. This makes it a drop-in replacement for Python's builtin `print()`.
 
 **Using `tldm.write()` (alternative):**
 
@@ -828,7 +842,7 @@ for i in bar:
         tldm.write(f"Done task {i}")
 ```
 
-Both methods will print to standard output `sys.stdout` by default, but you can specify any file-like object using the `file` argument.
+Both methods will print to standard output `sys.stdout` by default, but you can specify any file-like object using the `file` argument. Both also support the `flush` argument to force flushing of the output buffer.
 
 ---
 
