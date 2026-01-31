@@ -1727,8 +1727,7 @@ def test_len_not_from_total() -> None:
 
     def make_n(n):
         """Generator with no __len__"""
-        for i in range(n):
-            yield i
+        yield from range(n)
 
     with closing(StringIO()) as f:
         # Generator has no __len__, total is just an estimate
@@ -1781,8 +1780,7 @@ def test_length_hint() -> None:
 
     def make_n(n):
         """Generator with no __len__"""
-        for i in range(n):
-            yield i
+        yield from range(n)
 
     # Test with total parameter
     with closing(StringIO()) as f:
