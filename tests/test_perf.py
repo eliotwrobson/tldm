@@ -1,5 +1,6 @@
 import sys
 from contextlib import contextmanager
+from platform import system
 
 # Use relative/cpu timer to have reliable timings when there is a sudden load
 from time import process_time, sleep, time
@@ -249,6 +250,7 @@ def test_lock_args():
 
 @mark.flaky(reruns=10)
 @mark.xfail(reason="Performance tests are flaky on CI runners", strict=False)
+@mark.skipif(system() == "Windows", reason="Times out on Windows due to slow stdout writes")
 def test_iter_overhead_hard():
     """Test overhead of iteration based tldm (hard)"""
     checkCpuTime()
@@ -273,6 +275,7 @@ def test_iter_overhead_hard():
 
 @mark.flaky(reruns=10)
 @mark.xfail(reason="Performance tests are flaky on CI runners", strict=False)
+@mark.skipif(system() == "Windows", reason="Times out on Windows due to slow stdout writes")
 def test_manual_overhead_hard():
     """Test overhead of manual tldm (hard)"""
     checkCpuTime()
