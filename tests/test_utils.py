@@ -202,6 +202,35 @@ def test_format_num() -> None:
     assert format_num(-0.1234) == "-0.123"
 
 
+def test_percentage_not_100_when_incomplete() -> None:
+    """Test that percentage doesn't show 100% when task is incomplete (issue #1640)
+
+    When progress is at 99.76% (e.g., 5068/5080), the formatted percentage
+    should NOT round up to 100%. It should show 99% instead.
+    """
+    # 5068/5080 = 99.76% which would round to 100% with :3.0f format
+    meter = format_meter(5068, 5080, 100)
+    assert "100%" not in meter
+    assert "99%" in meter
+
+    # Test with custom bar_format that uses {percentage:3.0f}
+    meter = format_meter(
+        5068, 5080, 100, bar_format="{desc}: {percentage:3.0f}%|{bar}| {n}/{total}"
+    )
+    assert "100%" not in meter
+    assert " 99%" in meter
+
+    # Edge case: 99.5% should show 99%, not 100%
+    # 995/1000 = 99.5%
+    meter = format_meter(995, 1000, 100)
+    assert "100%" not in meter
+    assert "99%" in meter
+
+    # But 100% should show when actually complete
+    meter = format_meter(1000, 1000, 100)
+    assert "100%" in meter
+
+
 def test_format_interval() -> None:
     """Test time interval format"""
 
