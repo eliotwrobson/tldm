@@ -780,7 +780,6 @@ class tldm(Generic[T]):
 
     def update(self, n: int | float = 1) -> None:
         """
-        # TODO fix the type annotation here
         Manually update the progress bar, useful for streams
         such as reading files.
         E.g.:
