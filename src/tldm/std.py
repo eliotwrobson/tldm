@@ -338,6 +338,7 @@ class tldm(Generic[T]):
         file: TextIO | None = None,
         end: str = "\n",
         nolock: bool = False,
+        flush: bool = False,
     ) -> None:
         """Print a message via tldm (without overlap with bars)."""
         fp = file if file is not None else sys.stdout
@@ -345,6 +346,8 @@ class tldm(Generic[T]):
             # Write the message
             fp.write(s)
             fp.write(end)
+            if flush:
+                fp.flush()
 
     @classmethod
     def print(
@@ -354,9 +357,10 @@ class tldm(Generic[T]):
         sep: str = " ",
         end: str = "\n",
         nolock: bool = False,
+        flush: bool = False,
     ) -> None:
         """Print several heterogeneous values via tldm (without overlap with bars)."""
-        cls.write(sep.join(f"{v}" for v in values), file=file, end=end, nolock=nolock)
+        cls.write(sep.join(f"{v}" for v in values), file=file, end=end, nolock=nolock, flush=flush)
 
     @classmethod
     @contextmanager
