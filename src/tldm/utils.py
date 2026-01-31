@@ -691,10 +691,20 @@ def format_meter(
     inv_rate = 1 / rate if rate else None
 
     rate_noinv_fmt = (
-        ((format_sizeof(rate) if unit_scale else f"{rate:5.2f}") if rate else "?") + unit + "/s"
+        (
+            (format_sizeof(rate, divisor=unit_divisor) if unit_scale else f"{rate:5.2f}")
+            if rate
+            else "?"
+        )
+        + unit
+        + "/s"
     )
     rate_inv_fmt = (
-        ((format_sizeof(inv_rate) if unit_scale else f"{inv_rate:5.2f}") if inv_rate else "?")
+        (
+            (format_sizeof(inv_rate, divisor=unit_divisor) if unit_scale else f"{inv_rate:5.2f}")
+            if inv_rate
+            else "?"
+        )
         + "s/"
         + unit
     )
@@ -704,8 +714,13 @@ def format_meter(
         n_fmt = format_sizeof(n, divisor=unit_divisor)
         total_fmt = format_sizeof(total, divisor=unit_divisor) if total is not None else "?"
     else:
-        n_fmt = str(n)
-        total_fmt = str(total) if total is not None else "?"
+        # Format with reasonable precision instead of full float precision
+        n_fmt = f"{n:.2f}" if isinstance(n, float) else str(n)
+        total_fmt = (
+            f"{total:.2f}"
+            if isinstance(total, float) and total is not None
+            else (str(total) if total is not None else "?")
+        )
 
     with contextlib.suppress(TypeError):
         postfix = ", " + postfix if postfix else ""

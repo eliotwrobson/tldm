@@ -1704,6 +1704,53 @@ def test_print_compatible_args() -> None:
         assert our_file.getvalue() == "test!\n"
 
 
+def test_unit_divisor_for_rate_fmt() -> None:
+    """Test that unit_divisor affects rate_fmt calculation (issue #1690)"""
+    from tldm.utils import format_meter
+
+    # Test with unit_divisor=1024 (binary)
+    result = format_meter(
+        n=5120,
+        total=10240,
+        elapsed=1.0,
+        unit="B",
+        unit_scale=True,
+        unit_divisor=1024,
+    )
+    # Rate should be 5120 B/s = 5.00kiB/s with divisor=1024
+    assert "5.00kiB/s" in result or "5.00kB/s" in result, f"Expected kiB/s in rate, got: {result}"
+
+    # Test with unit_divisor=1000 (decimal, default)
+    result = format_meter(
+        n=5000,
+        total=10000,
+        elapsed=1.0,
+        unit="B",
+        unit_scale=True,
+        unit_divisor=1000,
+    )
+    # Rate should be 5000 B/s = 5.00kB/s with divisor=1000
+    assert "5.00kB/s" in result, f"Expected 5.00kB/s in rate, got: {result}"
+
+
+def test_unit_scale_numeric_formatting() -> None:
+    """Test that numeric unit_scale uses proper formatting (issue #1575)"""
+    from tldm.utils import format_meter
+
+    # When unit_scale is a numeric multiplier, n_fmt and total_fmt should be formatted nicely
+    result = format_meter(
+        n=1,  # Will be scaled to 1/7 = 0.142857...
+        total=7,  # Will be scaled to 7/7 = 1.0
+        elapsed=0.1,
+        unit_scale=1 / 7,
+    )
+    # Should NOT show full precision like "0.14285714285714285"
+    # Should show something reasonable like "0.14" or "0.1"
+    assert "0.14285714285714285" not in result, f"Excessive precision in result: {result}"
+    # Should show formatted numbers
+    assert "/1.0 " in result or "/1.00" in result, f"Expected formatted total, got: {result}"
+
+
 def test_len() -> None:
     """Test advance len (numpy array shape)"""
     np = importorskip("numpy")
