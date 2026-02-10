@@ -1717,8 +1717,8 @@ def test_unit_divisor_for_rate_fmt() -> None:
         unit_scale=True,
         unit_divisor=1024,
     )
-    # Rate should be 5120 B/s = 5.00kiB/s with divisor=1024
-    assert "5.00kiB/s" in result or "5.00kB/s" in result, f"Expected kiB/s in rate, got: {result}"
+    # Rate should be 5120 B/s = 5.00KiB/s with divisor=1024 (binary prefixes)
+    assert "5.00KiB/s" in result, f"Expected binary KiB/s in rate, got: {result}"
 
     # Test with unit_divisor=1000 (decimal, default)
     result = format_meter(
@@ -1729,8 +1729,8 @@ def test_unit_divisor_for_rate_fmt() -> None:
         unit_scale=True,
         unit_divisor=1000,
     )
-    # Rate should be 5000 B/s = 5.00kB/s with divisor=1000
-    assert "5.00kB/s" in result, f"Expected 5.00kB/s in rate, got: {result}"
+    # Rate should be 5000 B/s = 5.00kB/s with divisor=1000 (decimal prefixes)
+    assert "5.00kB/s" in result, f"Expected decimal 5.00kB/s in rate, got: {result}"
 
 
 def test_unit_scale_numeric_formatting() -> None:

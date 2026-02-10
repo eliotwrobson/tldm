@@ -3,6 +3,7 @@ from tldm.utils import (
     format_interval,
     format_meter,
     format_num,
+    format_sizeof,
     get_ema_func,
 )
 
@@ -242,3 +243,28 @@ def test_format_interval() -> None:
     assert format_interval(-60) == "-01:00"
     assert format_interval(-100000) == "-1d 3:46:40"
     assert format_interval(0) == "00:00"
+
+
+def test_binary_si_prefixes() -> None:
+    """Test binary SI prefixes with unit_divisor=1024 (issue #1690, PR #1692)"""
+    # format_sizeof should use binary prefixes (Ki, Mi, Gi) when divisor=1024
+    assert format_sizeof(1024, divisor=1024) == "1.00Ki"
+    assert format_sizeof(1024**2, divisor=1024) == "1.00Mi"
+    assert format_sizeof(1024**3, divisor=1024) == "1.00Gi"
+
+    # format_sizeof should use decimal prefixes (k, M, G) when divisor=1000
+    assert format_sizeof(1000, divisor=1000) == "1.00k"
+    assert format_sizeof(1000**2, divisor=1000) == "1.00M"
+    assert format_sizeof(1000**3, divisor=1000) == "1.00G"
+
+    # format_meter should use binary prefixes throughout when unit_divisor=1024
+    result = format_meter(
+        n=5120, total=10240, elapsed=1.0, unit="B", unit_scale=True, unit_divisor=1024
+    )
+    assert "5.00Ki" in result and "10.0Ki" in result and "5.00KiB/s" in result
+
+    # format_meter should use decimal prefixes throughout when unit_divisor=1000
+    result = format_meter(
+        n=5000, total=10000, elapsed=1.0, unit="B", unit_scale=True, unit_divisor=1000
+    )
+    assert "5.00k" in result and "10.0k" in result and "5.00kB/s" in result

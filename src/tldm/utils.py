@@ -483,6 +483,8 @@ def format_sizeof(num: float, divisor: float = 1000) -> str:
         Number (>= 1) to format.
     divisor  : float, optional
         Divisor between prefixes [default: 1000].
+        When divisor is 1024, binary SI prefixes (Ki, Mi, Gi, etc.) are used.
+        When divisor is 1000, decimal SI prefixes (k, M, G, etc.) are used.
 
     Returns
     -------
@@ -492,7 +494,12 @@ def format_sizeof(num: float, divisor: float = 1000) -> str:
     if num == 0:
         return "0"
 
-    units = ["", "k", "M", "G", "T", "P", "E", "Z", "Y", "R", "Q"]
+    # Use binary SI prefixes (Ki, Mi, Gi) when divisor is 1024
+    # Use decimal SI prefixes (k, M, G) when divisor is 1000
+    if divisor == 1024:
+        units = ["", "Ki", "Mi", "Gi", "Ti", "Pi", "Ei", "Zi", "Yi", "Ri", "Qi"]
+    else:
+        units = ["", "k", "M", "G", "T", "P", "E", "Z", "Y", "R", "Q"]
 
     # Calculate the exponent of the number's magnitude
     # This directly finds the correct unit without looping
