@@ -6,7 +6,7 @@ import logging
 import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .std import tldm as std_tldm

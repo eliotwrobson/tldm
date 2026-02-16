@@ -89,6 +89,7 @@ def tldm_pandas(**tldm_kwargs: dict[str, Any]) -> None:
 
             # Init bar
             from ..aliases import auto_tldm
+
             t = auto_tldm(total=total, **tldm_kwargs)
 
             # Try to use pandas' is_builtin_func if available (optimization)
