@@ -6,7 +6,6 @@ from contextlib import contextmanager
 from operator import length_hint
 from os import cpu_count
 
-from ..std import tldm as std_tldm
 from ..utils import TldmWarning
 
 
@@ -39,7 +38,9 @@ def _executor_map(PoolExecutor, fn, *iterables, **tldm_kwargs):
     kwargs = tldm_kwargs.copy()
     if "total" not in kwargs:
         kwargs["total"] = length_hint(iterables[0])
-    tldm_class = kwargs.pop("tldm_class", std_tldm)
+    tldm_class = kwargs.pop("tldm_class", None)
+    if tldm_class is None:
+        from ..std import tldm as tldm_class
     max_workers = kwargs.pop("max_workers", min(32, cpu_count() + 4))
     timeout = kwargs.pop("timeout", None)
     chunksize = kwargs.pop("chunksize", 1)

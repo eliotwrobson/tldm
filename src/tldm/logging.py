@@ -6,17 +6,20 @@ import logging
 import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
-from .std import tldm as std_tldm
+if TYPE_CHECKING:
+    from .std import tldm as std_tldm
 
 
 class TldmLoggingHandler(logging.StreamHandler):
     def __init__(
         self,
-        tldm_class: "type[std_tldm]" = std_tldm,
+        tldm_class: "type[std_tldm] | None" = None,
     ) -> None:
         super().__init__()
+        if tldm_class is None:
+            from .std import tldm as tldm_class
         self.tldm_class = tldm_class
 
     def emit(self, record: logging.LogRecord) -> None:
@@ -49,7 +52,7 @@ def _get_first_found_console_logging_handler(
 @contextmanager
 def logging_redirect_tldm(
     loggers: list[logging.Logger] | None = None,
-    tldm_class: "type[std_tldm]" = std_tldm,
+    tldm_class: "type[std_tldm] | None" = None,
 ) -> Iterator[None]:
     """
     Context manager redirecting console logging to `tldm.write()`, leaving
@@ -81,6 +84,8 @@ def logging_redirect_tldm(
     """
     if loggers is None:
         loggers = [logging.root]
+    if tldm_class is None:
+        from .std import tldm as tldm_class
     original_handlers_list = [logger.handlers for logger in loggers]
     try:
         for logger in loggers:
@@ -106,7 +111,7 @@ def logging_redirect_tldm(
 def tldm_logging_redirect(
     *args: Any,
     **kwargs: Any,
-) -> Iterator[std_tldm]:
+) -> "Iterator[std_tldm]":
     """
     Convenience shortcut for:
     ```python
@@ -123,7 +128,9 @@ def tldm_logging_redirect(
     """
     tldm_kwargs = dict(kwargs)
     loggers = tldm_kwargs.pop("loggers", None)
-    tldm_class = tldm_kwargs.pop("tldm_class", std_tldm)
+    tldm_class = tldm_kwargs.pop("tldm_class", None)
+    if tldm_class is None:
+        from .std import tldm as tldm_class
     with tldm_class(*args, **tldm_kwargs) as pbar:
         with logging_redirect_tldm(loggers=loggers, tldm_class=tldm_class):
             yield pbar
