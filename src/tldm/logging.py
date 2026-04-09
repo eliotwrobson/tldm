@@ -20,6 +20,7 @@ class TldmLoggingHandler(logging.StreamHandler):
         super().__init__()
         if tldm_class is None:
             from .std import tldm
+
             self.tldm_class: type[std_tldm] = tldm
         else:
             self.tldm_class = tldm_class
