@@ -553,7 +553,7 @@ class tldm(Generic[T]):
         self.n = initial
 
         # if nested, at initial sp() call we replace '\r' by '\n' to
-        # not overwrite the outer progress bar
+        # not overwrite the outer progressbar
         with self.get_lock():
             # mark fixed positions as negative
             self.pos = self._get_free_pos(self) if position is None else -position
@@ -780,7 +780,7 @@ class tldm(Generic[T]):
 
     def update(self, n: int | float = 1) -> None:
         """
-        Manually update the progress bar, useful for streams
+        Manually update the progressbar, useful for streams
         such as reading files.
         E.g.:
         >>> t = tldm(total=filesize) # Initialise
@@ -902,9 +902,9 @@ class tldm(Generic[T]):
         return None
 
     def _display_final_bar(self) -> None:
-        """Display the final progress bar with overall rate statistics.
+        """Display the final progressbar with overall rate statistics.
 
-        This is called when closing a completed progress bar. It disables
+        This is called when closing a completed progressbar. It disables
         smoothing (sets EMA to always return 1.0) to show the overall rate
         (total iterations / total time) instead of a weighted average.
         """
@@ -1022,7 +1022,7 @@ class tldm(Generic[T]):
 
     def set_description(self, desc: str | None = None, refresh: bool = True) -> None:
         """
-        Set/modify description of the progress bar.
+        Set/modify description of the progressbar.
 
         Parameters
         ----------

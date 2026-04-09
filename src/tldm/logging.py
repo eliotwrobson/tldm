@@ -19,8 +19,10 @@ class TldmLoggingHandler(logging.StreamHandler):
     ) -> None:
         super().__init__()
         if tldm_class is None:
-            from .std import tldm as tldm_class
-        self.tldm_class = tldm_class
+            from .std import tldm
+            self.tldm_class: type[std_tldm] = tldm
+        else:
+            self.tldm_class = tldm_class
 
     def emit(self, record: logging.LogRecord) -> None:
         try:
