@@ -361,7 +361,7 @@ class TldmWarning(Warning):
         msg: str,
         fp_write: Callable[[str], None] | None = None,
         *args: Any,
-        **kwargs: dict[str, Any],
+        **kwargs: Any,
     ) -> None:
         if fp_write is not None:
             fp_write("\n" + self.__class__.__name__ + ": " + str(msg).rstrip() + "\n")
@@ -609,7 +609,7 @@ def format_meter(
     initial: float | int = 0,
     colour: str | None = None,
     title: bool = False,
-    **extra_kwargs: dict[str, Any],
+    **extra_kwargs: Any,
 ):
     """
     Return a string-based progress bar given some parameters

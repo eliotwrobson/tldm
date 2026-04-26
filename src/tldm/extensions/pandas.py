@@ -6,7 +6,7 @@ import contextlib
 from typing import Any
 
 
-def tldm_pandas(**tldm_kwargs: dict[str, Any]) -> None:
+def tldm_pandas(**tldm_kwargs: Any) -> None:
     """
     Registers the current `tldm` class with
         pandas.core.
