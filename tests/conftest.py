@@ -11,10 +11,7 @@ from tldm import tldm
 @fixture(autouse=True)
 def pretest_posttest():
     """Fixture for all tests ensuring environment cleanup"""
-    try:
-        sys.setswitchinterval(1)
-    except AttributeError:
-        sys.setcheckinterval(100)  # deprecated
+    sys.setswitchinterval(1)
 
     if getattr(tldm, "_instances", False):
         n = len(tldm._instances)
