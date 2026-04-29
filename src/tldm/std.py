@@ -256,7 +256,7 @@ class tldm(Generic[T]):
 
     registered_classes: ClassVar[set[type["tldm"]]] = set()
 
-    def __new__(cls, *args: Any, **kwargs: dict[str, Any]) -> "tldm":
+    def __new__(cls, *args: Any, **kwargs: Any) -> "tldm":
         instance = object.__new__(cls)
         tldm.registered_classes.add(cls)
         with cls.get_lock():  # also constructs lock if non-existent
@@ -447,7 +447,7 @@ class tldm(Generic[T]):
         delay: float = 0.0,
         title: bool = False,
         complete_bar_on_early_finish: bool = False,
-        **kwargs: dict[str, Any],
+        **kwargs: Any,
     ) -> None:
         """see tldm.tldm for arguments"""
 
@@ -1044,7 +1044,7 @@ class tldm(Generic[T]):
         self,
         ordered_dict: dict | None = None,
         refresh: bool = True,
-        **kwargs: dict[str, Any],
+        **kwargs: Any,
     ) -> None:
         """
         Set/modify postfix (additional stats)
