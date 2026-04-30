@@ -550,6 +550,7 @@ class tldm(Generic[T]):
         self.metrics_raw: dict[str, Any] = {}
         self.metrics_fmt = ""
         self._metric_history: dict[str, deque[float]] = {}
+        self._metric_sums: dict[str, float] = {}
         self.colour = colour
         self._time = time
         self.cpu_time = cpu_time
@@ -1113,16 +1114,24 @@ class tldm(Generic[T]):
         for stale_key in tuple(self._metric_history.keys()):
             if stale_key not in active_keys:
                 self._metric_history.pop(stale_key, None)
+                self._metric_sums.pop(stale_key, None)
 
         for key, raw_value in metrics.items():
             raw_metrics[key] = raw_value
             display_value = raw_value
             if self.metric_window and isinstance(raw_value, Real) and not isinstance(raw_value, bool):
                 history = self._metric_history.setdefault(key, deque(maxlen=self.metric_window))
-                history.append(float(raw_value))
-                display_value = sum(history) / len(history)
+                if key not in self._metric_sums:
+                    self._metric_sums[key] = float(sum(history))
+                if len(history) == history.maxlen:
+                    self._metric_sums[key] -= history[0]
+                value = float(raw_value)
+                history.append(value)
+                self._metric_sums[key] += value
+                display_value = self._metric_sums[key] / len(history)
             else:
                 self._metric_history.pop(key, None)
+                self._metric_sums.pop(key, None)
             display_metrics[key] = display_value
 
         self.metrics = display_metrics
