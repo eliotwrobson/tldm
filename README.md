@@ -196,6 +196,61 @@ for i in tldm(range(1000000), unit="B", unit_scale=True, unit_divisor=1024):
     pass  # This will show KB, MB, etc.
 ```
 
+### Training Loop with Metrics and Sections
+
+```python
+from tldm import training_tldm
+
+with training_tldm(epochs=3, steps_per_epoch=len(loader), desc="train") as trainer:
+  for epoch in trainer.epochs():
+    for batch in trainer.steps(loader):
+      with trainer.section("forward"):
+        loss = run_forward(batch)
+      with trainer.section("backward"):
+        run_backward(loss)
+
+      trainer.set_metrics(loss=loss.item(), lr=optimizer.param_groups[0]["lr"])
+```
+
+This produces an outer epoch bar, an inner step bar, a live `phase=...` indicator while sections are running, and rolling metric/timing summaries on the step bar.
+
+### Debugging a Slow Pipeline
+
+```python
+from tldm import tldm
+
+with tldm(files, desc="pipeline") as pbar:
+  for path in pbar:
+    pbar.mark("load")
+    with pbar.section("parse"):
+      doc = parse_file(path)
+    with pbar.section("transform"):
+      result = transform(doc)
+    with pbar.section("write"):
+      save_result(result)
+```
+
+This is useful when you want the bar itself to show where time is going without opening a profiler first.
+
+### Expressive Custom Bar Format
+
+```python
+from tldm import tldm
+
+with tldm(
+  range(100),
+  metric_window=10,
+  cpu_time=True,
+  bar_format="{l_bar}{bar}{r_bar} | phase {active_phase} | loss {metrics[loss]:.4f} | cpu {cpu_elapsed}",
+) as pbar:
+  for step in pbar:
+    with pbar.section("train_step"):
+      loss = train_step(step)
+    pbar.set_metrics(loss=loss)
+```
+
+This pattern works well with AI-generated scripts because the interesting state is exposed directly through `bar_format`.
+
 ---
 
 ## Parameters
@@ -753,6 +808,18 @@ with trange(10) as t:
         t.set_postfix(loss=random(), gen=randint(1, 999), str='h', lst=[1, 2])
         sleep(0.1)
 ```
+
+    The higher-level metric and timing helpers build on the same display surface:
+
+    ```python
+    from tldm import tldm
+
+    with tldm(range(5), metric_window=3, desc="debug") as pbar:
+      for step in pbar:
+        with pbar.section("work"):
+          value = run_step(step)
+        pbar.set_metrics(loss=value, refresh=False)
+    ```
 
 You can also use a custom `bar_format`:
 
