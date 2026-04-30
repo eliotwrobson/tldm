@@ -2012,6 +2012,43 @@ def test_set_metrics_smoothed() -> None:
         assert "2.00|0.75" in our_file.getvalue()
 
 
+def test_set_throughput() -> None:
+    """Test throughput display and postfix combination."""
+    with closing(StringIO()) as our_file:
+        with tldm(total=1, file=our_file, miniters=1, mininterval=0) as t:
+            timer = cpu_timify(t)
+            t.set_postfix(stage="train", refresh=False)
+            timer.sleep(2)
+            t.set_throughput(samples=8, refresh=False)
+            t.update()
+
+        res = our_file.getvalue()
+        assert "samples/s=4" in res
+        assert "stage=train" in res
+
+
+def test_set_throughput_smoothed() -> None:
+    """Test rolling smoothing for throughput helpers."""
+    with closing(StringIO()) as our_file:
+        with tldm(
+            total=2,
+            file=our_file,
+            miniters=1,
+            mininterval=0,
+            metric_window=2,
+            bar_format="{throughput[samples]:.1f}|{throughput_raw[samples]:.1f}",
+        ) as t:
+            timer = cpu_timify(t)
+            timer.sleep(1)
+            t.set_throughput(samples=10, refresh=False)
+            t.update()
+            timer.sleep(1)
+            t.set_throughput(samples=30, refresh=False)
+            t.update()
+
+        assert "20.0|30.0" in our_file.getvalue()
+
+
 def test_mark_records_timing() -> None:
     """Test mark timing summary and custom formatting access."""
     with closing(StringIO()) as our_file:
@@ -2100,6 +2137,32 @@ def test_final_summary_output() -> None:
         assert "forward_count=1" in res
 
 
+def test_final_summary_includes_throughput() -> None:
+    """Test final summaries include throughput values and raw throughput when smoothed."""
+    with closing(StringIO()) as our_file:
+        with tldm(
+            total=2,
+            file=our_file,
+            miniters=1,
+            mininterval=0,
+            summary=True,
+            metric_window=2,
+            desc="train",
+        ) as t:
+            timer = cpu_timify(t)
+            timer.sleep(1)
+            t.set_throughput(samples=10, refresh=False)
+            t.update()
+            timer.sleep(1)
+            t.set_throughput(samples=30, refresh=False)
+            t.update()
+
+        res = our_file.getvalue()
+        assert "train summary:" in res
+        assert "samples/s=20" in res
+        assert "samples/s_raw=30" in res
+
+
 def test_final_summary_includes_cpu_time() -> None:
     """Test final summaries include total CPU time when cpu_time=True."""
     timer = DiscreteTimer()
@@ -2167,6 +2230,7 @@ def test_training_tldm_nested_helper() -> None:
                 timer = cpu_timify(trainer.step_bar)
                 for step in step_iter:
                     trainer.set_metrics(loss=epoch + step / 10, refresh=False)
+                    trainer.set_throughput(samples=32, elapsed_s=0.5, refresh=False)
                     with trainer.section("forward"):
                         timer.sleep(0.2)
 
@@ -2174,6 +2238,7 @@ def test_training_tldm_nested_helper() -> None:
         assert "train 1/2" in res
         assert "epoch 1/2" in res
         assert "loss=" in res
+        assert "samples/s=64" in res
         assert "phase=forward" in res
 
 

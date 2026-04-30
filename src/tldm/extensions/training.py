@@ -110,6 +110,9 @@ class TrainingTldm(Generic[T]):
     def set_metrics(self, *args: Any, **kwargs: Any) -> None:
         self._active_bar().set_metrics(*args, **kwargs)
 
+    def set_throughput(self, *args: Any, **kwargs: Any) -> None:
+        self._active_bar().set_throughput(*args, **kwargs)
+
     def mark(self, *args: Any, **kwargs: Any) -> None:
         self._active_bar().mark(*args, **kwargs)
 

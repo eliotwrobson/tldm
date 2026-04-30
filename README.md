@@ -396,27 +396,34 @@ with trange(10) as t:
         sleep(0.1)
 ```
 
-If your application already knows how many bytes it just read or wrote, you can also show manual throughput using the existing postfix API.
+`set_postfix(...)` is still useful for arbitrary display-only values, but named per-second counters now have a dedicated helper.
+
+### `set_throughput(ordered_dict=None, refresh=True, elapsed_s=None, **kwargs)`
+
+Set named throughput values measured in units per second. If `elapsed_s` is omitted, `tldm` uses the wall-clock time since the previous throughput update. If `metric_window` is set on the bar, throughput values are displayed as a rolling average over the most recent updates while `throughput_raw` keeps the latest instantaneous rate.
 
 ```python
 from tldm import tldm
-from time import perf_counter
-
-last_t = perf_counter()
 
 with tldm(range(100)) as pbar:
     for item in pbar:
         read_bytes, write_bytes = process_item(item)
-        now = perf_counter()
-        dt = max(now - last_t, 1e-9)
-        pbar.set_postfix(
-            read=f"{read_bytes / dt / 1e6:0.1f}MB/s",
-            write=f"{write_bytes / dt / 1e6:0.1f}MB/s",
-        )
-        last_t = now
+    pbar.set_throughput(read_mb=read_bytes / 1e6, write_mb=write_bytes / 1e6)
 ```
 
-This keeps the core API smaller while still supporting I/O-heavy workflows.
+Throughput data is also exposed through `bar_format` via `throughput`, `throughput_raw`, and `throughput_fmt`.
+
+```python
+from tldm import tldm
+
+with tldm(
+  range(10),
+  metric_window=5,
+  bar_format="{l_bar}{bar}{r_bar} | samples {throughput[samples]:.1f}/s raw {throughput_raw[samples]:.1f}/s",
+) as pbar:
+  for batch in pbar:
+    pbar.set_throughput(samples=len(batch))
+```
 
 ### `set_metrics(ordered_dict=None, refresh=True, **kwargs)`
 
@@ -496,7 +503,7 @@ with training_tldm(epochs=3, steps_per_epoch=len(loader), desc="train") as train
         run_forward(batch)
 ```
 
-This keeps the epoch bar on the outer line, creates a step bar on the next line, and forwards `set_metrics(...)`, `mark(...)`, and `section(...)` to the active step bar.
+This keeps the epoch bar on the outer line, creates a step bar on the next line, and forwards `set_metrics(...)`, `set_throughput(...)`, `mark(...)`, and `section(...)` to the active step bar.
 
 ### Final Summaries
 
@@ -512,7 +519,7 @@ with tldm(range(100), metric_window=10, summary=True, desc="train") as pbar:
     pbar.set_metrics(loss=loss)
 ```
 
-This leaves the normal final bar in place and then prints a summary line with elapsed wall time, displayed metrics, raw smoothed metrics when they differ, and per-phase average/total/count values. For example: `train summary: elapsed=12.4s, loss=0.4213, loss_raw=0.4389, forward_avg=18.2ms, forward_total=9.1s, forward_count=500`.
+This leaves the normal final bar in place and then prints a summary line with elapsed wall time, displayed throughput and metrics, raw smoothed values when they differ, and per-phase average/total/count values. For example: `train summary: elapsed=12.4s, samples/s=812, samples/s_raw=940, loss=0.4213, loss_raw=0.4389, forward_avg=18.2ms, forward_total=9.1s, forward_count=500`.
 
 ### Custom CPU Time Display
 

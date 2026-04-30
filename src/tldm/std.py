@@ -555,6 +555,12 @@ class tldm(Generic[T]):
         self.metrics_fmt = ""
         self._metric_history: dict[str, deque[float]] = {}
         self._metric_sums: dict[str, float] = {}
+        self.throughput: dict[str, float] = {}
+        self.throughput_raw: dict[str, float] = {}
+        self.throughput_fmt = ""
+        self._throughput_history: dict[str, deque[float]] = {}
+        self._throughput_sums: dict[str, float] = {}
+        self._last_throughput_t: float | None = None
         self.timings: dict[str, dict[str, float | int | None]] = {}
         self.timings_fmt = ""
         self._last_mark_t: float | None = None
@@ -959,6 +965,12 @@ class tldm(Generic[T]):
         if elapsed_s is not None:
             summary_parts.append(f"elapsed={self._format_timing_value(elapsed_s)}")
 
+        for key, value in self.throughput.items():
+            summary_parts.append(f"{key}/s={self._format_throughput_value(value)}")
+            raw_value = self.throughput_raw.get(key)
+            if raw_value is not None and raw_value != value:
+                summary_parts.append(f"{key}/s_raw={self._format_throughput_value(raw_value)}")
+
         for key, value in self.metrics.items():
             summary_parts.append(f"{key}={self._format_metric_value(value)}")
             raw_value = self.metrics_raw.get(key)
@@ -1102,6 +1114,17 @@ class tldm(Generic[T]):
         self._ema_dn = get_ema_func(self.smoothing)
         self._ema_dt = get_ema_func(self.smoothing)
         self._ema_miniters = get_ema_func(self.smoothing)
+        self.metrics = {}
+        self.metrics_raw = {}
+        self.metrics_fmt = ""
+        self._metric_history = {}
+        self._metric_sums = {}
+        self.throughput = {}
+        self.throughput_raw = {}
+        self.throughput_fmt = ""
+        self._throughput_history = {}
+        self._throughput_sums = {}
+        self._last_throughput_t = None
         self.timings = {}
         self.timings_fmt = ""
         self._last_mark_t = None
@@ -1158,6 +1181,16 @@ class tldm(Generic[T]):
         if value >= 1e-3:
             return f"{value * 1e3:.1f}ms"
         return f"{value * 1e6:.0f}us"
+
+    @staticmethod
+    def _format_throughput_value(value: float) -> str:
+        return format_num(value)
+
+    def _update_throughput_fmt(self) -> None:
+        self.throughput_fmt = ", ".join(
+            f"{name}/s={self._format_throughput_value(value)}"
+            for name, value in self.throughput.items()
+        )
 
     def _update_timings_fmt(self) -> None:
         self.timings_fmt = ", ".join(
@@ -1294,6 +1327,58 @@ class tldm(Generic[T]):
         if refresh:
             self.refresh()
 
+    def set_throughput(
+        self,
+        ordered_dict: dict | None = None,
+        refresh: bool = True,
+        elapsed_s: float | None = None,
+        **kwargs: Any,
+    ) -> None:
+        """Set named throughput values measured in units per second."""
+        counts = {} if ordered_dict is None else dict(ordered_dict)
+        for key in sorted(kwargs.keys()):
+            counts[key] = kwargs[key]
+
+        current_t = self._time()
+        if elapsed_s is None:
+            start_t = self.start_t if self._last_throughput_t is None else self._last_throughput_t
+            elapsed_s = current_t - start_t
+        elapsed_s = max(elapsed_s, 1e-9)
+        self._last_throughput_t = current_t
+
+        throughput: dict[str, float] = {}
+        throughput_raw: dict[str, float] = {}
+        active_keys = set(counts.keys())
+
+        for stale_key in tuple(self._throughput_history.keys()):
+            if stale_key not in active_keys:
+                self._throughput_history.pop(stale_key, None)
+                self._throughput_sums.pop(stale_key, None)
+
+        for key, amount in counts.items():
+            raw_value = float(amount) / elapsed_s
+            throughput_raw[key] = raw_value
+            display_value = raw_value
+            if self.metric_window:
+                history = self._throughput_history.setdefault(key, deque(maxlen=self.metric_window))
+                if key not in self._throughput_sums:
+                    self._throughput_sums[key] = float(sum(history))
+                if len(history) == history.maxlen:
+                    self._throughput_sums[key] -= history[0]
+                history.append(raw_value)
+                self._throughput_sums[key] += raw_value
+                display_value = self._throughput_sums[key] / len(history)
+            else:
+                self._throughput_history.pop(key, None)
+                self._throughput_sums.pop(key, None)
+            throughput[key] = display_value
+
+        self.throughput = throughput
+        self.throughput_raw = throughput_raw
+        self._update_throughput_fmt()
+        if refresh:
+            self.refresh()
+
     def set_postfix(
         self,
         ordered_dict: dict | None = None,
@@ -1363,6 +1448,8 @@ class tldm(Generic[T]):
             display_parts.append(f"phase={active_phase}")
         if self.timings_fmt:
             display_parts.append(self.timings_fmt)
+        if self.throughput_fmt:
+            display_parts.append(self.throughput_fmt)
         if self.metrics_fmt:
             display_parts.append(self.metrics_fmt)
         if isinstance(display_postfix, str) or display_postfix is not None:
@@ -1372,6 +1459,8 @@ class tldm(Generic[T]):
                 display_postfix = ", ".join(filter(None, cast(list[str], display_parts)))
             else:
                 display_postfix = display_parts[-1]
+        throughput = defaultdict(float, self.throughput)
+        throughput_raw = defaultdict(float, self.throughput_raw)
         metrics = defaultdict(float, self.metrics)
         metrics_raw = defaultdict(float, self.metrics_raw)
         timings = defaultdict(_default_timing_stats, self.timings)
@@ -1391,6 +1480,9 @@ class tldm(Generic[T]):
             "bar_format": self.bar_format,
             "postfix": display_postfix,
             "active_phase": active_phase,
+            "throughput": throughput,
+            "throughput_raw": throughput_raw,
+            "throughput_fmt": self.throughput_fmt,
             "metrics": metrics,
             "metrics_raw": metrics_raw,
             "metrics_fmt": self.metrics_fmt,
