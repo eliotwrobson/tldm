@@ -8,6 +8,8 @@ from .aliases import tmap as tmap
 from .aliases import tproduct as tproduct
 from .aliases import trange as trange
 from .aliases import tzip as tzip
+from .extensions.training import TrainingTldm as TrainingTldm
+from .extensions.training import training_tldm as training_tldm
 from .std import tldm as tldm
 
 __version__ = version("tldm")

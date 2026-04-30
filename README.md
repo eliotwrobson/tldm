@@ -423,6 +423,23 @@ with tldm(
       run_forward(item)
 ```
 
+### `training_tldm(epochs, steps_per_epoch=None, **kwargs)`
+
+Create a lightweight training-oriented wrapper around nested epoch and step bars.
+
+```python
+from tldm import training_tldm
+
+with training_tldm(epochs=3, steps_per_epoch=len(loader), desc="train") as trainer:
+  for epoch in trainer.epochs():
+    for batch in trainer.steps(loader):
+      trainer.set_metrics(loss=compute_loss(batch), lr=1e-4)
+      with trainer.section("forward"):
+        run_forward(batch)
+```
+
+This keeps the epoch bar on the outer line, creates a step bar on the next line, and forwards `set_metrics(...)`, `mark(...)`, and `section(...)` to the active step bar.
+
 ### Custom CPU Time Display
 
 If you want to show process CPU time alongside the usual wall-clock stats, enable `cpu_time=True` and reference the injected fields from `bar_format`.

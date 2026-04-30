@@ -13,7 +13,7 @@ from warnings import catch_warnings, simplefilter
 
 from pytest import importorskip, mark, raises
 
-from tldm import tldm, trange
+from tldm import tldm, training_tldm, trange
 from tldm.utils import ObjectWrapper, TldmWarning, format_interval
 
 from .conftest import patch_lock
@@ -2069,6 +2069,32 @@ def test_section_exposes_active_phase() -> None:
             t.update()
 
         assert "forward" in our_file.getvalue()
+
+
+def test_training_tldm_nested_helper() -> None:
+    """Test the training helper wraps nested epoch/step bars and proxies helpers."""
+    with closing(StringIO()) as our_file:
+        with training_tldm(
+            epochs=2,
+            steps_per_epoch=2,
+            file=our_file,
+            miniters=1,
+            mininterval=0,
+        ) as trainer:
+            for epoch in trainer.epochs():
+                step_iter = trainer.steps(range(2))
+                assert trainer.step_bar is not None
+                timer = cpu_timify(trainer.step_bar)
+                for step in step_iter:
+                    trainer.set_metrics(loss=epoch + step / 10, refresh=False)
+                    with trainer.section("forward"):
+                        timer.sleep(0.2)
+
+        res = our_file.getvalue()
+        assert "train 1/2" in res
+        assert "epoch 1/2" in res
+        assert "loss=" in res
+        assert "phase=forward" in res
 
 
 @contextmanager

@@ -15,17 +15,7 @@ from numbers import Number, Real
 from operator import length_hint
 from threading import RLock as TRLock
 from time import process_time, time
-from typing import (
-    Any,
-    ClassVar,
-    Generic,
-    Literal,
-    Protocol,
-    Self,
-    TextIO,
-    TypeVar,
-    cast,
-)
+from typing import Any, ClassVar, Generic, Literal, Protocol, Self, TextIO, TypeVar, cast
 from warnings import warn
 from weakref import WeakSet
 
@@ -1138,7 +1128,7 @@ class tldm(Generic[T]):
         refresh: bool = True,
     ) -> None:
         stats = self.timings.setdefault(name, _default_timing_stats())
-        count = int(stats["count"]) + 1
+        count = cast(int, stats["count"]) + 1
         total = cast(float, stats["total"]) + elapsed_s
         stats["count"] = count
         stats["last"] = elapsed_s
@@ -1430,3 +1420,5 @@ class tldm(Generic[T]):
                 t.unit_scale = True
                 t.unit_divisor = 1024
             yield CallbackIOWrapper(t.update, stream, method)
+
+
