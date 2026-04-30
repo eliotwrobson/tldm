@@ -388,6 +388,39 @@ with tldm(
     pbar.set_metrics(loss=loss, acc=acc)
 ```
 
+### `mark(name, refresh=True)` and `section(name, refresh=True)`
+
+Record timing checkpoints or measure named code sections without leaving the progress-bar workflow.
+
+```python
+from tldm import tldm
+
+with tldm(range(100), desc="debug") as pbar:
+  for item in pbar:
+    pbar.mark("fetch")
+    with pbar.section("transform"):
+      transform(item)
+    with pbar.section("write"):
+      write(item)
+```
+
+By default, named timings are merged into the bar's postfix using average wall-clock time per name.
+
+Timing data is also exposed through `bar_format` via `timings` and `timings_fmt`.
+
+```python
+from tldm import tldm
+
+with tldm(
+  range(10),
+  bar_format="{l_bar}{bar}{r_bar} | load {timings[load][avg]:.3f}s forward {timings[forward][avg]:.3f}s",
+) as pbar:
+  for item in pbar:
+    pbar.mark("load")
+    with pbar.section("forward"):
+      run_forward(item)
+```
+
 ### Custom CPU Time Display
 
 If you want to show process CPU time alongside the usual wall-clock stats, enable `cpu_time=True` and reference the injected fields from `bar_format`.

@@ -47,6 +47,18 @@ from tldm.utils import (
 from ._monitor import TMonitor
 
 
+def _default_timing_stats() -> dict[str, float | int | None]:
+    return {
+        "count": 0,
+        "last": 0.0,
+        "avg": 0.0,
+        "total": 0.0,
+        "cpu_last": None,
+        "cpu_avg": None,
+        "cpu_total": None,
+    }
+
+
 # TODO remove some of these errors and put them in a separate file
 class TldmTypeError(TypeError):
     pass
@@ -551,6 +563,10 @@ class tldm(Generic[T]):
         self.metrics_fmt = ""
         self._metric_history: dict[str, deque[float]] = {}
         self._metric_sums: dict[str, float] = {}
+        self.timings: dict[str, dict[str, float | int | None]] = {}
+        self.timings_fmt = ""
+        self._last_mark_t: float | None = None
+        self._last_cpu_mark_t: float | None = None
         self.colour = colour
         self._time = time
         self.cpu_time = cpu_time
@@ -1020,8 +1036,12 @@ class tldm(Generic[T]):
 
         self.start_t += dt
         self.last_print_t += dt
+        if self._last_mark_t is not None:
+            self._last_mark_t += dt
         if cpu_dt is not None and cpu_dt >= 0.0 and self.cpu_start_t is not None:
             self.cpu_start_t += cpu_dt
+            if self._last_cpu_mark_t is not None:
+                self._last_cpu_mark_t += cpu_dt
 
     def reset(self, total: int | float | None = None) -> None:
         """
@@ -1045,6 +1065,10 @@ class tldm(Generic[T]):
         self._ema_dn = get_ema_func(self.smoothing)
         self._ema_dt = get_ema_func(self.smoothing)
         self._ema_miniters = get_ema_func(self.smoothing)
+        self.timings = {}
+        self.timings_fmt = ""
+        self._last_mark_t = None
+        self._last_cpu_mark_t = None
         self.refresh()
 
     def set_description(self, desc: str | None = None, refresh: bool = True) -> None:
@@ -1085,6 +1109,87 @@ class tldm(Generic[T]):
             return str(value)
         return value.strip()
 
+    @staticmethod
+    def _format_timing_value(value: float | None) -> str:
+        if value is None:
+            return "n/a"
+        if value >= 60:
+            return format_interval(value)
+        if value >= 1:
+            return f"{value:.2f}s"
+        if value >= 1e-3:
+            return f"{value * 1e3:.1f}ms"
+        return f"{value * 1e6:.0f}us"
+
+    def _update_timings_fmt(self) -> None:
+        self.timings_fmt = ", ".join(
+            f"{name}={self._format_timing_value(cast(float, stats['avg']))}"
+            for name, stats in self.timings.items()
+            if stats["count"]
+        )
+
+    def _record_timing(
+        self,
+        name: str,
+        elapsed_s: float,
+        cpu_elapsed_s: float | None = None,
+        refresh: bool = True,
+    ) -> None:
+        stats = self.timings.setdefault(name, _default_timing_stats())
+        count = int(stats["count"]) + 1
+        total = cast(float, stats["total"]) + elapsed_s
+        stats["count"] = count
+        stats["last"] = elapsed_s
+        stats["total"] = total
+        stats["avg"] = total / count
+        if cpu_elapsed_s is not None:
+            cpu_total = cast(float | None, stats["cpu_total"])
+            cpu_total = (cpu_total or 0.0) + cpu_elapsed_s
+            stats["cpu_last"] = cpu_elapsed_s
+            stats["cpu_total"] = cpu_total
+            stats["cpu_avg"] = cpu_total / count
+        self._update_timings_fmt()
+        if refresh:
+            self.refresh()
+
+    def mark(self, name: str, refresh: bool = True) -> None:
+        """Record elapsed time since the previous mark or bar start."""
+        current_t = self._time()
+        start_t = self.start_t if self._last_mark_t is None else self._last_mark_t
+        elapsed_s = max(current_t - start_t, 0.0)
+        self._last_mark_t = current_t
+
+        cpu_elapsed_s = None
+        if self._cpu_time is not None:
+            current_cpu_t = self._cpu_time()
+            cpu_start_t = (
+                self.cpu_start_t if self._last_cpu_mark_t is None else self._last_cpu_mark_t
+            )
+            if cpu_start_t is not None:
+                cpu_elapsed_s = max(current_cpu_t - cpu_start_t, 0.0)
+            self._last_cpu_mark_t = current_cpu_t
+
+        self._record_timing(name, elapsed_s, cpu_elapsed_s=cpu_elapsed_s, refresh=refresh)
+
+    @contextmanager
+    def section(self, name: str, refresh: bool = True) -> Iterator[None]:
+        """Measure a named code section and record its duration."""
+        start_t = self._time()
+        start_cpu_t = self._cpu_time() if self._cpu_time is not None else None
+        try:
+            yield
+        finally:
+            end_t = self._time()
+            cpu_elapsed_s = None
+            if self._cpu_time is not None and start_cpu_t is not None:
+                cpu_elapsed_s = max(self._cpu_time() - start_cpu_t, 0.0)
+            self._record_timing(
+                name,
+                max(end_t - start_t, 0.0),
+                cpu_elapsed_s=cpu_elapsed_s,
+                refresh=refresh,
+            )
+
     def set_metrics(
         self,
         ordered_dict: dict | None = None,
@@ -1119,7 +1224,11 @@ class tldm(Generic[T]):
         for key, raw_value in metrics.items():
             raw_metrics[key] = raw_value
             display_value = raw_value
-            if self.metric_window and isinstance(raw_value, Real) and not isinstance(raw_value, bool):
+            if (
+                self.metric_window
+                and isinstance(raw_value, Real)
+                and not isinstance(raw_value, bool)
+            ):
                 history = self._metric_history.setdefault(key, deque(maxlen=self.metric_window))
                 if key not in self._metric_sums:
                     self._metric_sums[key] = float(sum(history))
@@ -1205,13 +1314,21 @@ class tldm(Generic[T]):
         if self._cpu_time is not None and self.cpu_start_t is not None:
             cpu_elapsed_s = self._cpu_time() - self.cpu_start_t
         display_postfix = self.postfix
+        display_parts: list[Any] = []
+        if self.timings_fmt:
+            display_parts.append(self.timings_fmt)
         if self.metrics_fmt:
-            if display_postfix is None:
-                display_postfix = self.metrics_fmt
-            elif isinstance(display_postfix, str):
-                display_postfix = ", ".join(filter(None, [self.metrics_fmt, display_postfix]))
+            display_parts.append(self.metrics_fmt)
+        if isinstance(display_postfix, str) or display_postfix is not None:
+            display_parts.append(display_postfix)
+        if display_parts:
+            if all(isinstance(part, str) for part in display_parts):
+                display_postfix = ", ".join(filter(None, cast(list[str], display_parts)))
+            else:
+                display_postfix = display_parts[-1]
         metrics = defaultdict(float, self.metrics)
         metrics_raw = defaultdict(float, self.metrics_raw)
+        timings = defaultdict(_default_timing_stats, self.timings)
         return {
             "n": self.n,
             "total": self.total,
@@ -1230,6 +1347,8 @@ class tldm(Generic[T]):
             "metrics": metrics,
             "metrics_raw": metrics_raw,
             "metrics_fmt": self.metrics_fmt,
+            "timings": timings,
+            "timings_fmt": self.timings_fmt,
             "unit_divisor": self.unit_divisor,
             "initial": self.initial,
             "colour": self.colour,

@@ -2012,6 +2012,44 @@ def test_set_metrics_smoothed() -> None:
         assert "2.00|0.75" in our_file.getvalue()
 
 
+def test_mark_records_timing() -> None:
+    """Test mark timing summary and custom formatting access."""
+    with closing(StringIO()) as our_file:
+        with tldm(
+            total=1,
+            file=our_file,
+            miniters=1,
+            mininterval=0,
+            bar_format="{timings[load][count]}|{timings[load][avg]:.3f}",
+        ) as t:
+            timer = cpu_timify(t)
+            timer.sleep(0.25)
+            t.mark("load", refresh=False)
+            assert t.format_dict["timings"]["load"]["count"] == 1
+            assert t.format_dict["timings"]["load"]["avg"] == 0.25
+            t.update()
+
+        assert "1|0.250" in our_file.getvalue()
+
+
+def test_section_records_timing_and_postfix() -> None:
+    """Test section timing accumulates and appears in the default postfix."""
+    with closing(StringIO()) as our_file:
+        with tldm(total=1, file=our_file, miniters=1, mininterval=0) as t:
+            timer = cpu_timify(t)
+            with t.section("forward", refresh=False):
+                timer.sleep(0.2)
+            with t.section("forward", refresh=False):
+                timer.sleep(0.4)
+
+            assert t.format_dict["timings"]["forward"]["count"] == 2
+            assert round(t.format_dict["timings"]["forward"]["avg"], 3) == 0.3
+            assert "forward=300.0ms" in t.format_dict["timings_fmt"]
+            t.update()
+
+        assert "forward=300.0ms" in our_file.getvalue()
+
+
 @contextmanager
 def std_out_err_redirect_tldm(tldm_file=sys.stderr):
     orig_out_err = sys.stdout, sys.stderr
