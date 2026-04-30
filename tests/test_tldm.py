@@ -1073,6 +1073,31 @@ def test_custom_format() -> None:
         assert "00:00 in total" in our_file.getvalue()
 
 
+def test_cpu_elapsed_format() -> None:
+    """Test CPU elapsed fields for custom bar formatting."""
+    timer = DiscreteTimer()
+    cpu_timer = [0.0]
+
+    with closing(StringIO()) as our_file:
+        with tldm(
+            total=2,
+            file=our_file,
+            cpu_time=True,
+            miniters=1,
+            mininterval=0,
+            bar_format="{cpu_elapsed}/{elapsed}",
+        ) as t:
+            cpu_timify(t, timer)
+            t._cpu_time = lambda: cpu_timer[0]
+            t.cpu_start_t = cpu_timer[0]
+
+            timer.sleep(5)
+            cpu_timer[0] = 2
+            t.update()
+
+        assert "00:02/00:05" in our_file.getvalue()
+
+
 def test_eta(capsys):
     """Test eta bar_format"""
     from datetime import datetime as dt

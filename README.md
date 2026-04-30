@@ -280,6 +280,9 @@ for i in tldm(range(1000000), unit="B", unit_scale=True, unit_divisor=1024):
 - **delay** : float, optional
   Don't display until [default: 0] seconds have elapsed.
 
+- **cpu_time** : bool, optional
+  If True, track process CPU time and expose `cpu_elapsed` and `cpu_elapsed_s` for custom `bar_format` strings. Wall-clock timing still drives the default elapsed, ETA, and rate display [default: False].
+
 ---
 
 ## Methods
@@ -331,6 +334,23 @@ with trange(10) as t:
         t.set_postfix(loss=random(), accuracy=random())
         sleep(0.1)
 ```
+
+    ### Custom CPU Time Display
+
+    If you want to show process CPU time alongside the usual wall-clock stats, enable `cpu_time=True` and reference the injected fields from `bar_format`.
+
+    ```python
+    from tldm import tldm
+
+    for _ in tldm(
+      range(100),
+      cpu_time=True,
+      bar_format="{l_bar}{bar}{r_bar} [cpu {cpu_elapsed}]",
+    ):
+      pass
+    ```
+
+    This is most useful for CPU-bound work. ETA and rate still use wall-clock time.
 
 ### `print(*values, file=sys.stdout, sep=" ", end="\n", flush=False)`
 

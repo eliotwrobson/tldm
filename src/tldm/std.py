@@ -14,7 +14,7 @@ from multiprocessing import RLock
 from numbers import Number
 from operator import length_hint
 from threading import RLock as TRLock
-from time import time
+from time import process_time, time
 from typing import (
     Any,
     ClassVar,
@@ -37,6 +37,7 @@ from tldm.utils import (
     _resize_signal_handler,
     _screen_shape_wrapper,
     _supports_unicode,
+    format_interval,
     format_meter,
     format_num,
     get_ema_func,
@@ -242,6 +243,11 @@ class tldm(Generic[T]):
         Bar colour (e.g. 'green', '#00ff00').
     delay  : float, optional
         Don't display until [default: 0] seconds have elapsed.
+    cpu_time  : bool, optional
+        If True, track process CPU time in addition to wall-clock time
+        and expose `cpu_elapsed` and `cpu_elapsed_s` for custom
+        `bar_format` strings. Wall-clock timing still drives ETA,
+        elapsed, and rate calculations. [default: False].
 
     Returns
     -------
@@ -446,6 +452,7 @@ class tldm(Generic[T]):
         colour: str | None = None,
         delay: float = 0.0,
         title: bool = False,
+        cpu_time: bool = False,
         complete_bar_on_early_finish: bool = False,
         **kwargs: Any,
     ) -> None:
@@ -539,6 +546,8 @@ class tldm(Generic[T]):
         self.postfix = None
         self.colour = colour
         self._time = time
+        self.cpu_time = cpu_time
+        self._cpu_time = process_time if cpu_time else None
         self.title = title
         self.complete_bar_on_early_finish = complete_bar_on_early_finish
         self._close_with_exception = False
@@ -560,14 +569,15 @@ class tldm(Generic[T]):
 
         # Initialize the screen printer
         self.sp = get_status_printer(self.fp)
-        if delay <= 0:
-            self.refresh(lock_args=self.lock_args)
-
         # Init the time counter
         self.last_print_t = self._time()
         self.last_pause_t = 0.0
+        self.last_cpu_pause_t = 0.0
+        self.cpu_start_t = self._cpu_time() if self._cpu_time is not None else None
         # NB: Avoid race conditions by setting start_t at the very end of init
         self.start_t = self.last_print_t
+        if delay <= 0:
+            self.refresh(lock_args=self.lock_args)
 
     def __bool__(self) -> bool:
         if self.total is not None:
@@ -979,6 +989,8 @@ class tldm(Generic[T]):
             self.refresh()
 
         self.last_pause_t = self._time()
+        if self._cpu_time is not None:
+            self.last_cpu_pause_t = self._cpu_time()
 
     def unpause(self) -> None:
         """Restart tldm timer from last pause."""
@@ -991,12 +1003,18 @@ class tldm(Generic[T]):
 
         dt = self._time() - self.last_pause_t
         self.last_pause_t = 0.0
+        cpu_dt = None
+        if self._cpu_time is not None:
+            cpu_dt = self._cpu_time() - self.last_cpu_pause_t
+            self.last_cpu_pause_t = 0.0
 
         if dt < 0.0:
             return
 
         self.start_t += dt
         self.last_print_t += dt
+        if cpu_dt is not None and cpu_dt >= 0.0 and self.cpu_start_t is not None:
+            self.cpu_start_t += cpu_dt
 
     def reset(self, total: int | float | None = None) -> None:
         """
@@ -1015,6 +1033,8 @@ class tldm(Generic[T]):
             return
         self.last_print_n = 0
         self.last_print_t = self.start_t = self._time()
+        self.last_cpu_pause_t = 0.0
+        self.cpu_start_t = self._cpu_time() if self._cpu_time is not None else None
         self._ema_dn = get_ema_func(self.smoothing)
         self._ema_dt = get_ema_func(self.smoothing)
         self._ema_miniters = get_ema_func(self.smoothing)
@@ -1099,10 +1119,15 @@ class tldm(Generic[T]):
             )
         if self.force_dynamic_ncols_update and self.dynamic_ncols_func:
             self.ncols, self.nrows = self.dynamic_ncols_func(self.fp)
+        cpu_elapsed_s = None
+        if self._cpu_time is not None and self.cpu_start_t is not None:
+            cpu_elapsed_s = self._cpu_time() - self.cpu_start_t
         return {
             "n": self.n,
             "total": self.total,
             "elapsed": self._time() - self.start_t if hasattr(self, "start_t") else 0,
+            "cpu_elapsed": format_interval(cpu_elapsed_s) if cpu_elapsed_s is not None else None,
+            "cpu_elapsed_s": cpu_elapsed_s,
             "ncols": self.ncols,
             "nrows": self.nrows,
             "prefix": self.desc,
@@ -1116,6 +1141,7 @@ class tldm(Generic[T]):
             "initial": self.initial,
             "colour": self.colour,
             "title": self.title,
+            "cpu_time": self.cpu_time,
         }
 
     def display(self, msg: str | None = None, pos: int | None = None) -> bool:
