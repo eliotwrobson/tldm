@@ -2071,6 +2071,86 @@ def test_section_exposes_active_phase() -> None:
         assert "forward" in our_file.getvalue()
 
 
+def test_final_summary_output() -> None:
+    """Test optional final summaries for elapsed time, metrics, and timings."""
+    with closing(StringIO()) as our_file:
+        with tldm(
+            total=1,
+            file=our_file,
+            miniters=1,
+            mininterval=0,
+            summary=True,
+            metric_window=2,
+            desc="train",
+        ) as t:
+            timer = cpu_timify(t)
+            with t.section("forward", refresh=False):
+                timer.sleep(0.2)
+            t.set_metrics(loss=0.4, refresh=False)
+            t.set_metrics(loss=0.6, refresh=False)
+            t.update()
+
+        res = our_file.getvalue()
+        assert "train summary:" in res
+        assert "elapsed=200.0ms" in res
+        assert "loss=0.5" in res
+        assert "loss_raw=0.6" in res
+        assert "forward_avg=200.0ms" in res
+        assert "forward_total=200.0ms" in res
+        assert "forward_count=1" in res
+
+
+def test_final_summary_includes_cpu_time() -> None:
+    """Test final summaries include total CPU time when cpu_time=True."""
+    timer = DiscreteTimer()
+    cpu_timer = [0.0]
+
+    with closing(StringIO()) as our_file:
+        with tldm(
+            total=1,
+            file=our_file,
+            miniters=1,
+            mininterval=0,
+            summary=True,
+            cpu_time=True,
+            desc="train",
+        ) as t:
+            cpu_timify(t, timer)
+            t._cpu_time = lambda: cpu_timer[0]
+            t.cpu_start_t = cpu_timer[0]
+
+            timer.sleep(5)
+            cpu_timer[0] = 2
+            t.update()
+
+        res = our_file.getvalue()
+        assert "train summary:" in res
+        assert "elapsed=5.00s" in res
+        assert "cpu=00:02" in res
+
+
+def test_final_summary_with_leave_false() -> None:
+    """Test summaries still print when the final bar itself is not left on screen."""
+    with closing(StringIO()) as our_file:
+        with tldm(
+            total=1,
+            file=our_file,
+            miniters=1,
+            mininterval=0,
+            summary=True,
+            leave=False,
+            desc="debug",
+        ) as t:
+            timer = cpu_timify(t)
+            with t.section("parse", refresh=False):
+                timer.sleep(0.1)
+            t.update()
+
+        res = our_file.getvalue()
+        assert "debug summary:" in res
+        assert "parse_avg=100.0ms" in res
+
+
 def test_training_tldm_nested_helper() -> None:
     """Test the training helper wraps nested epoch/step bars and proxies helpers."""
     with closing(StringIO()) as our_file:

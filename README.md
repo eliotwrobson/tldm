@@ -341,6 +341,9 @@ This pattern works well with AI-generated scripts because the interesting state 
 - **metric_window** : int, optional
   If set, numeric values passed to `set_metrics(...)` are smoothed over the most recent `metric_window` updates before being displayed.
 
+- **summary** : bool, optional
+  If True, print a one-line final summary after the bar finishes using any active metric and timing summaries.
+
 ---
 
 ## Methods
@@ -494,6 +497,22 @@ with training_tldm(epochs=3, steps_per_epoch=len(loader), desc="train") as train
 ```
 
 This keeps the epoch bar on the outer line, creates a step bar on the next line, and forwards `set_metrics(...)`, `mark(...)`, and `section(...)` to the active step bar.
+
+### Final Summaries
+
+If you want a compact summary after the bar completes, enable `summary=True`.
+
+```python
+from tldm import tldm
+
+with tldm(range(100), metric_window=10, summary=True, desc="train") as pbar:
+  for batch in pbar:
+    with pbar.section("forward"):
+      loss = train_step(batch)
+    pbar.set_metrics(loss=loss)
+```
+
+This leaves the normal final bar in place and then prints a summary line with elapsed wall time, displayed metrics, raw smoothed metrics when they differ, and per-phase average/total/count values. For example: `train summary: elapsed=12.4s, loss=0.4213, loss_raw=0.4389, forward_avg=18.2ms, forward_total=9.1s, forward_count=500`.
 
 ### Custom CPU Time Display
 

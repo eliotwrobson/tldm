@@ -456,6 +456,7 @@ class tldm(Generic[T]):
         title: bool = False,
         cpu_time: bool = False,
         metric_window: int | None = None,
+        summary: bool = False,
         complete_bar_on_early_finish: bool = False,
         **kwargs: Any,
     ) -> None:
@@ -537,6 +538,7 @@ class tldm(Generic[T]):
         self.lock_args = lock_args
         self.delay = delay
         self.metric_window = metric_window
+        self.summary = summary
         self.force_dynamic_ncols_update = force_dynamic_ncols_update
         self.dynamic_ncols_func = dynamic_ncols_func
         # Register signal handler for window resize if dynamic ncols is enabled
@@ -896,15 +898,22 @@ class tldm(Generic[T]):
 
             pos = abs(self.pos)
             leave = pos == 0 if self.leave is None else self.leave
+            summary_msg = self._get_summary_message()
 
             if leave:
                 # stats for overall rate (no weighted average)
                 self._display_final_bar()
+                if summary_msg:
+                    fp_write(summary_msg)
+                    fp_write("\n")
             else:
                 # clear previous display
                 with self._lock:
                     if self.display(msg="", pos=pos) and not pos:
                         fp_write("\r")
+                if summary_msg:
+                    fp_write(summary_msg)
+                    fp_write("\n")
 
         finally:
             # decrement instance pos and remove from internal set
@@ -940,6 +949,43 @@ class tldm(Generic[T]):
             self._ema_dt = dummy_func
             self.display(pos=0)
             self.fp.write("\n")
+
+    def _get_summary_message(self) -> str | None:
+        if not self.summary:
+            return None
+
+        summary_parts: list[str] = []
+        elapsed_s = self._time() - self.start_t if hasattr(self, "start_t") else None
+        if elapsed_s is not None:
+            summary_parts.append(f"elapsed={self._format_timing_value(elapsed_s)}")
+
+        for key, value in self.metrics.items():
+            summary_parts.append(f"{key}={self._format_metric_value(value)}")
+            raw_value = self.metrics_raw.get(key)
+            if raw_value != value:
+                summary_parts.append(f"{key}_raw={self._format_metric_value(raw_value)}")
+
+        for name, stats in self.timings.items():
+            count = cast(int, stats["count"])
+            if not count:
+                continue
+            summary_parts.append(
+                f"{name}_avg={self._format_timing_value(cast(float, stats['avg']))}"
+            )
+            summary_parts.append(
+                f"{name}_total={self._format_timing_value(cast(float, stats['total']))}"
+            )
+            summary_parts.append(f"{name}_count={count}")
+
+        if self.cpu_time and self._cpu_time is not None and self.cpu_start_t is not None:
+            summary_parts.append(f"cpu={format_interval(self._cpu_time() - self.cpu_start_t)}")
+        if not summary_parts:
+            return None
+
+        summary_prefix = self.desc[:-2] if self.desc.endswith(": ") else self.desc
+        if summary_prefix:
+            return f"{summary_prefix} summary: " + ", ".join(summary_parts)
+        return "summary: " + ", ".join(summary_parts)
 
     def clear(self, nolock: bool = False) -> None:
         """Clear current bar display."""
@@ -1420,5 +1466,3 @@ class tldm(Generic[T]):
                 t.unit_scale = True
                 t.unit_divisor = 1024
             yield CallbackIOWrapper(t.update, stream, method)
-
-
