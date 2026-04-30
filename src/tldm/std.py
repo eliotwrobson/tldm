@@ -6,26 +6,16 @@ Includes a default `range` iterator printing to `stderr`.
 import copy
 import signal
 import sys
-from collections import OrderedDict, defaultdict
+from collections import OrderedDict, defaultdict, deque
 from collections.abc import Iterable, Iterator
 from contextlib import AbstractContextManager, contextmanager, suppress
 from functools import total_ordering
 from multiprocessing import RLock
-from numbers import Number
+from numbers import Number, Real
 from operator import length_hint
 from threading import RLock as TRLock
 from time import process_time, time
-from typing import (
-    Any,
-    ClassVar,
-    Generic,
-    Literal,
-    Protocol,
-    Self,
-    TextIO,
-    TypeVar,
-    cast,
-)
+from typing import Any, ClassVar, Generic, Literal, Protocol, Self, TextIO, TypeVar, cast
 from warnings import warn
 from weakref import WeakSet
 
@@ -45,6 +35,18 @@ from tldm.utils import (
 )
 
 from ._monitor import TMonitor
+
+
+def _default_timing_stats() -> dict[str, float | int | None]:
+    return {
+        "count": 0,
+        "last": 0.0,
+        "avg": 0.0,
+        "total": 0.0,
+        "cpu_last": None,
+        "cpu_avg": None,
+        "cpu_total": None,
+    }
 
 
 # TODO remove some of these errors and put them in a separate file
@@ -453,6 +455,8 @@ class tldm(Generic[T]):
         delay: float = 0.0,
         title: bool = False,
         cpu_time: bool = False,
+        metric_window: int | None = None,
+        summary: bool = False,
         complete_bar_on_early_finish: bool = False,
         **kwargs: Any,
     ) -> None:
@@ -533,6 +537,8 @@ class tldm(Generic[T]):
         self.initial = initial
         self.lock_args = lock_args
         self.delay = delay
+        self.metric_window = metric_window
+        self.summary = summary
         self.force_dynamic_ncols_update = force_dynamic_ncols_update
         self.dynamic_ncols_func = dynamic_ncols_func
         # Register signal handler for window resize if dynamic ncols is enabled
@@ -544,6 +550,22 @@ class tldm(Generic[T]):
         self._ema_miniters = get_ema_func(smoothing)
         self.bar_format = bar_format
         self.postfix = None
+        self.metrics: dict[str, Any] = {}
+        self.metrics_raw: dict[str, Any] = {}
+        self.metrics_fmt = ""
+        self._metric_history: dict[str, deque[float]] = {}
+        self._metric_sums: dict[str, float] = {}
+        self.throughput: dict[str, float] = {}
+        self.throughput_raw: dict[str, float] = {}
+        self.throughput_fmt = ""
+        self._throughput_history: dict[str, deque[float]] = {}
+        self._throughput_sums: dict[str, float] = {}
+        self._last_throughput_t: float | None = None
+        self.timings: dict[str, dict[str, float | int | None]] = {}
+        self.timings_fmt = ""
+        self._last_mark_t: float | None = None
+        self._last_cpu_mark_t: float | None = None
+        self._active_sections: list[str] = []
         self.colour = colour
         self._time = time
         self.cpu_time = cpu_time
@@ -882,15 +904,22 @@ class tldm(Generic[T]):
 
             pos = abs(self.pos)
             leave = pos == 0 if self.leave is None else self.leave
+            summary_msg = self._get_summary_message()
 
             if leave:
                 # stats for overall rate (no weighted average)
                 self._display_final_bar()
+                if summary_msg:
+                    fp_write(summary_msg)
+                    fp_write("\n")
             else:
                 # clear previous display
                 with self._lock:
                     if self.display(msg="", pos=pos) and not pos:
                         fp_write("\r")
+                if summary_msg:
+                    fp_write(summary_msg)
+                    fp_write("\n")
 
         finally:
             # decrement instance pos and remove from internal set
@@ -926,6 +955,118 @@ class tldm(Generic[T]):
             self._ema_dt = dummy_func
             self.display(pos=0)
             self.fp.write("\n")
+
+    def summary_dict(self) -> dict[str, Any]:
+        """Return the current summary state as plain data."""
+        elapsed_s = self._time() - self.start_t if hasattr(self, "start_t") else None
+        cpu_elapsed_s = None
+        if self.cpu_time and self._cpu_time is not None and self.cpu_start_t is not None:
+            cpu_elapsed_s = self._cpu_time() - self.cpu_start_t
+
+        timings: dict[str, dict[str, Any]] = {}
+        for name, stats in self.timings.items():
+            count = cast(int, stats["count"])
+            if not count:
+                continue
+            timing_entry: dict[str, Any] = {
+                "count": count,
+                "last_s": cast(float | None, stats["last"]),
+                "last": self._format_timing_value(cast(float | None, stats["last"])),
+                "avg_s": cast(float | None, stats["avg"]),
+                "avg": self._format_timing_value(cast(float | None, stats["avg"])),
+                "total_s": cast(float, stats["total"]),
+                "total": self._format_timing_value(cast(float, stats["total"])),
+            }
+            cpu_last_s = cast(float | None, stats["cpu_last"])
+            cpu_avg_s = cast(float | None, stats["cpu_avg"])
+            cpu_total_s = cast(float | None, stats["cpu_total"])
+            if cpu_last_s is not None:
+                timing_entry["cpu_last_s"] = cpu_last_s
+                timing_entry["cpu_last"] = self._format_timing_value(cpu_last_s)
+            if cpu_avg_s is not None:
+                timing_entry["cpu_avg_s"] = cpu_avg_s
+                timing_entry["cpu_avg"] = self._format_timing_value(cpu_avg_s)
+            if cpu_total_s is not None:
+                timing_entry["cpu_total_s"] = cpu_total_s
+                timing_entry["cpu_total"] = self._format_timing_value(cpu_total_s)
+            timings[name] = timing_entry
+
+        summary_prefix = self.desc[:-2] if self.desc.endswith(": ") else self.desc
+        return {
+            "desc": summary_prefix or None,
+            "n": self.n,
+            "total": self.total,
+            "active_phase": self._active_sections[-1] if self._active_sections else None,
+            "elapsed_s": elapsed_s,
+            "elapsed": self._format_timing_value(elapsed_s) if elapsed_s is not None else None,
+            "cpu_elapsed_s": cpu_elapsed_s,
+            "cpu_elapsed": format_interval(cpu_elapsed_s) if cpu_elapsed_s is not None else None,
+            "throughput": dict(self.throughput),
+            "throughput_raw": dict(self.throughput_raw),
+            "throughput_display": {
+                key: self._format_throughput_value(value) for key, value in self.throughput.items()
+            },
+            "throughput_raw_display": {
+                key: self._format_throughput_value(value)
+                for key, value in self.throughput_raw.items()
+            },
+            "metrics": dict(self.metrics),
+            "metrics_raw": dict(self.metrics_raw),
+            "metrics_display": {
+                key: self._format_metric_value(value) for key, value in self.metrics.items()
+            },
+            "metrics_raw_display": {
+                key: self._format_metric_value(value) for key, value in self.metrics_raw.items()
+            },
+            "timings": timings,
+        }
+
+    def _get_summary_message(self) -> str | None:
+        if not self.summary:
+            return None
+
+        summary = self.summary_dict()
+        summary_parts: list[str] = []
+        elapsed = summary["elapsed"]
+        if elapsed is not None:
+            summary_parts.append(f"elapsed={elapsed}")
+
+        throughput = cast(dict[str, float], summary["throughput"])
+        throughput_display = cast(dict[str, str], summary["throughput_display"])
+        throughput_raw = cast(dict[str, float], summary["throughput_raw"])
+        throughput_raw_display = cast(dict[str, str], summary["throughput_raw_display"])
+        for key, value in throughput.items():
+            summary_parts.append(f"{key}/s={throughput_display[key]}")
+            raw_value = throughput_raw.get(key)
+            if raw_value is not None and raw_value != value:
+                summary_parts.append(f"{key}/s_raw={throughput_raw_display[key]}")
+
+        metrics = cast(dict[str, Any], summary["metrics"])
+        metrics_display = cast(dict[str, str], summary["metrics_display"])
+        metrics_raw = cast(dict[str, Any], summary["metrics_raw"])
+        metrics_raw_display = cast(dict[str, str], summary["metrics_raw_display"])
+        for key, value in metrics.items():
+            summary_parts.append(f"{key}={metrics_display[key]}")
+            raw_value = metrics_raw.get(key)
+            if raw_value != value:
+                summary_parts.append(f"{key}_raw={metrics_raw_display[key]}")
+
+        timings = cast(dict[str, dict[str, Any]], summary["timings"])
+        for name, stats in timings.items():
+            summary_parts.append(f"{name}_avg={stats['avg']}")
+            summary_parts.append(f"{name}_total={stats['total']}")
+            summary_parts.append(f"{name}_count={stats['count']}")
+
+        cpu_elapsed = summary["cpu_elapsed"]
+        if cpu_elapsed is not None:
+            summary_parts.append(f"cpu={cpu_elapsed}")
+        if not summary_parts:
+            return None
+
+        summary_prefix = cast(str | None, summary["desc"])
+        if summary_prefix:
+            return f"{summary_prefix} summary: " + ", ".join(summary_parts)
+        return "summary: " + ", ".join(summary_parts)
 
     def clear(self, nolock: bool = False) -> None:
         """Clear current bar display."""
@@ -1013,8 +1154,12 @@ class tldm(Generic[T]):
 
         self.start_t += dt
         self.last_print_t += dt
+        if self._last_mark_t is not None:
+            self._last_mark_t += dt
         if cpu_dt is not None and cpu_dt >= 0.0 and self.cpu_start_t is not None:
             self.cpu_start_t += cpu_dt
+            if self._last_cpu_mark_t is not None:
+                self._last_cpu_mark_t += cpu_dt
 
     def reset(self, total: int | float | None = None) -> None:
         """
@@ -1038,6 +1183,22 @@ class tldm(Generic[T]):
         self._ema_dn = get_ema_func(self.smoothing)
         self._ema_dt = get_ema_func(self.smoothing)
         self._ema_miniters = get_ema_func(self.smoothing)
+        self.metrics = {}
+        self.metrics_raw = {}
+        self.metrics_fmt = ""
+        self._metric_history = {}
+        self._metric_sums = {}
+        self.throughput = {}
+        self.throughput_raw = {}
+        self.throughput_fmt = ""
+        self._throughput_history = {}
+        self._throughput_sums = {}
+        self._last_throughput_t = None
+        self.timings = {}
+        self.timings_fmt = ""
+        self._last_mark_t = None
+        self._last_cpu_mark_t = None
+        self._active_sections = []
         self.refresh()
 
     def set_description(self, desc: str | None = None, refresh: bool = True) -> None:
@@ -1057,6 +1218,235 @@ class tldm(Generic[T]):
     def set_description_str(self, desc: str | None = None, refresh: bool = True) -> None:
         """Set/modify description without ': ' appended."""
         self.desc = desc or ""
+        if refresh:
+            self.refresh()
+
+    @staticmethod
+    def _format_metric_value(value: Any) -> str:
+        if isinstance(value, bool):
+            return str(value)
+        if isinstance(value, int):
+            return str(value)
+        if isinstance(value, Real):
+            value = float(value)
+            abs_value = abs(value)
+            if abs_value == 0:
+                return "0"
+            if 1e-4 <= abs_value < 1e4:
+                return f"{value:.4f}".rstrip("0").rstrip(".")
+            return f"{value:.3e}"
+        if not isinstance(value, str):
+            return str(value)
+        return value.strip()
+
+    @staticmethod
+    def _format_timing_value(value: float | None) -> str:
+        if value is None:
+            return "n/a"
+        if value >= 60:
+            return format_interval(value)
+        if value >= 1:
+            return f"{value:.2f}s"
+        if value >= 1e-3:
+            return f"{value * 1e3:.1f}ms"
+        return f"{value * 1e6:.0f}us"
+
+    @staticmethod
+    def _format_throughput_value(value: float) -> str:
+        return format_num(value)
+
+    def _update_throughput_fmt(self) -> None:
+        self.throughput_fmt = ", ".join(
+            f"{name}/s={self._format_throughput_value(value)}"
+            for name, value in self.throughput.items()
+        )
+
+    def _update_timings_fmt(self) -> None:
+        self.timings_fmt = ", ".join(
+            f"{name}={self._format_timing_value(cast(float, stats['avg']))}"
+            for name, stats in self.timings.items()
+            if stats["count"]
+        )
+
+    def _record_timing(
+        self,
+        name: str,
+        elapsed_s: float,
+        cpu_elapsed_s: float | None = None,
+        refresh: bool = True,
+    ) -> None:
+        stats = self.timings.setdefault(name, _default_timing_stats())
+        count = cast(int, stats["count"]) + 1
+        total = cast(float, stats["total"]) + elapsed_s
+        stats["count"] = count
+        stats["last"] = elapsed_s
+        stats["total"] = total
+        stats["avg"] = total / count
+        if cpu_elapsed_s is not None:
+            cpu_total = cast(float | None, stats["cpu_total"])
+            cpu_total = (cpu_total or 0.0) + cpu_elapsed_s
+            stats["cpu_last"] = cpu_elapsed_s
+            stats["cpu_total"] = cpu_total
+            stats["cpu_avg"] = cpu_total / count
+        self._update_timings_fmt()
+        if refresh:
+            self.refresh()
+
+    def mark(self, name: str, refresh: bool = True) -> None:
+        """Record elapsed time since the previous mark or bar start."""
+        current_t = self._time()
+        start_t = self.start_t if self._last_mark_t is None else self._last_mark_t
+        elapsed_s = max(current_t - start_t, 0.0)
+        self._last_mark_t = current_t
+
+        cpu_elapsed_s = None
+        if self._cpu_time is not None:
+            current_cpu_t = self._cpu_time()
+            cpu_start_t = (
+                self.cpu_start_t if self._last_cpu_mark_t is None else self._last_cpu_mark_t
+            )
+            if cpu_start_t is not None:
+                cpu_elapsed_s = max(current_cpu_t - cpu_start_t, 0.0)
+            self._last_cpu_mark_t = current_cpu_t
+
+        self._record_timing(name, elapsed_s, cpu_elapsed_s=cpu_elapsed_s, refresh=refresh)
+
+    @contextmanager
+    def section(self, name: str, refresh: bool = True) -> Iterator[None]:
+        """Measure a named code section and record its duration."""
+        start_t = self._time()
+        start_cpu_t = self._cpu_time() if self._cpu_time is not None else None
+        self._active_sections.append(name)
+        if refresh:
+            self.refresh()
+        try:
+            yield
+        finally:
+            if self._active_sections:
+                self._active_sections.pop()
+            end_t = self._time()
+            cpu_elapsed_s = None
+            if self._cpu_time is not None and start_cpu_t is not None:
+                cpu_elapsed_s = max(self._cpu_time() - start_cpu_t, 0.0)
+            self._record_timing(
+                name,
+                max(end_t - start_t, 0.0),
+                cpu_elapsed_s=cpu_elapsed_s,
+                refresh=refresh,
+            )
+
+    def set_metrics(
+        self,
+        ordered_dict: dict | None = None,
+        refresh: bool = True,
+        **kwargs: Any,
+    ) -> None:
+        """Set or update training/debug metrics displayed with the bar.
+
+        Numeric metrics can optionally be smoothed using a rolling window
+        when `metric_window` is set on the progress bar.
+
+        Parameters
+        ----------
+        ordered_dict  : dict, optional
+        refresh  : bool, optional
+            Forces refresh [default: True].
+        kwargs  : dict, optional
+        """
+        metrics = {} if ordered_dict is None else dict(ordered_dict)
+        for key in sorted(kwargs.keys()):
+            metrics[key] = kwargs[key]
+
+        display_metrics: dict[str, Any] = {}
+        raw_metrics: dict[str, Any] = {}
+        active_keys = set(metrics.keys())
+
+        for stale_key in tuple(self._metric_history.keys()):
+            if stale_key not in active_keys:
+                self._metric_history.pop(stale_key, None)
+                self._metric_sums.pop(stale_key, None)
+
+        for key, raw_value in metrics.items():
+            raw_metrics[key] = raw_value
+            display_value = raw_value
+            if (
+                self.metric_window
+                and isinstance(raw_value, Real)
+                and not isinstance(raw_value, bool)
+            ):
+                history = self._metric_history.setdefault(key, deque(maxlen=self.metric_window))
+                if key not in self._metric_sums:
+                    self._metric_sums[key] = float(sum(history))
+                if len(history) == history.maxlen:
+                    self._metric_sums[key] -= history[0]
+                value = float(raw_value)
+                history.append(value)
+                self._metric_sums[key] += value
+                display_value = self._metric_sums[key] / len(history)
+            else:
+                self._metric_history.pop(key, None)
+                self._metric_sums.pop(key, None)
+            display_metrics[key] = display_value
+
+        self.metrics = display_metrics
+        self.metrics_raw = raw_metrics
+        self.metrics_fmt = ", ".join(
+            f"{key}={self._format_metric_value(value)}" for key, value in self.metrics.items()
+        )
+        if refresh:
+            self.refresh()
+
+    def set_throughput(
+        self,
+        ordered_dict: dict | None = None,
+        refresh: bool = True,
+        elapsed_s: float | None = None,
+        **kwargs: Any,
+    ) -> None:
+        """Set named throughput values measured in units per second."""
+        counts = {} if ordered_dict is None else dict(ordered_dict)
+        for key in sorted(kwargs.keys()):
+            counts[key] = kwargs[key]
+
+        current_t = self._time()
+        if elapsed_s is None:
+            start_t = self.start_t if self._last_throughput_t is None else self._last_throughput_t
+            elapsed_s = current_t - start_t
+        elapsed_s = max(elapsed_s, 1e-9)
+        self._last_throughput_t = current_t
+
+        throughput: dict[str, float] = {}
+        throughput_raw: dict[str, float] = {}
+        active_keys = set(counts.keys())
+
+        for stale_key in tuple(self._throughput_history.keys()):
+            if stale_key not in active_keys:
+                self._throughput_history.pop(stale_key, None)
+                self._throughput_sums.pop(stale_key, None)
+
+        for key, amount in counts.items():
+            raw_value = float(amount) / elapsed_s
+            throughput_raw[key] = raw_value
+            display_value = raw_value
+            if self.metric_window:
+                history = self._throughput_history.setdefault(
+                    key, deque(maxlen=self.metric_window)
+                )
+                if key not in self._throughput_sums:
+                    self._throughput_sums[key] = float(sum(history))
+                if len(history) == history.maxlen:
+                    self._throughput_sums[key] -= history[0]
+                history.append(raw_value)
+                self._throughput_sums[key] += raw_value
+                display_value = self._throughput_sums[key] / len(history)
+            else:
+                self._throughput_history.pop(key, None)
+                self._throughput_sums.pop(key, None)
+            throughput[key] = display_value
+
+        self.throughput = throughput
+        self.throughput_raw = throughput_raw
+        self._update_throughput_fmt()
         if refresh:
             self.refresh()
 
@@ -1122,6 +1512,29 @@ class tldm(Generic[T]):
         cpu_elapsed_s = None
         if self._cpu_time is not None and self.cpu_start_t is not None:
             cpu_elapsed_s = self._cpu_time() - self.cpu_start_t
+        display_postfix = self.postfix
+        active_phase = self._active_sections[-1] if self._active_sections else None
+        display_parts: list[Any] = []
+        if active_phase:
+            display_parts.append(f"phase={active_phase}")
+        if self.timings_fmt:
+            display_parts.append(self.timings_fmt)
+        if self.throughput_fmt:
+            display_parts.append(self.throughput_fmt)
+        if self.metrics_fmt:
+            display_parts.append(self.metrics_fmt)
+        if isinstance(display_postfix, str) or display_postfix is not None:
+            display_parts.append(display_postfix)
+        if display_parts:
+            if all(isinstance(part, str) for part in display_parts):
+                display_postfix = ", ".join(filter(None, cast(list[str], display_parts)))
+            else:
+                display_postfix = display_parts[-1]
+        throughput = defaultdict(float, self.throughput)
+        throughput_raw = defaultdict(float, self.throughput_raw)
+        metrics = defaultdict(float, self.metrics)
+        metrics_raw = defaultdict(float, self.metrics_raw)
+        timings = defaultdict(_default_timing_stats, self.timings)
         return {
             "n": self.n,
             "total": self.total,
@@ -1136,7 +1549,16 @@ class tldm(Generic[T]):
             "unit_scale": self.unit_scale,
             "rate": self._ema_dn() / self._ema_dt() if self._ema_dt() else None,  # type: ignore[call-arg]
             "bar_format": self.bar_format,
-            "postfix": self.postfix,
+            "postfix": display_postfix,
+            "active_phase": active_phase,
+            "throughput": throughput,
+            "throughput_raw": throughput_raw,
+            "throughput_fmt": self.throughput_fmt,
+            "metrics": metrics,
+            "metrics_raw": metrics_raw,
+            "metrics_fmt": self.metrics_fmt,
+            "timings": timings,
+            "timings_fmt": self.timings_fmt,
             "unit_divisor": self.unit_divisor,
             "initial": self.initial,
             "colour": self.colour,

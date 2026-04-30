@@ -196,6 +196,61 @@ for i in tldm(range(1000000), unit="B", unit_scale=True, unit_divisor=1024):
     pass  # This will show KB, MB, etc.
 ```
 
+### Training Loop with Metrics and Sections
+
+```python
+from tldm import training_tldm
+
+with training_tldm(epochs=3, steps_per_epoch=len(loader), desc="train") as trainer:
+  for epoch in trainer.epochs():
+    for batch in trainer.steps(loader):
+      with trainer.section("forward"):
+        loss = run_forward(batch)
+      with trainer.section("backward"):
+        run_backward(loss)
+
+      trainer.set_metrics(loss=loss.item(), lr=optimizer.param_groups[0]["lr"])
+```
+
+This produces an outer epoch bar, an inner step bar, a live `phase=...` indicator while sections are running, and rolling metric/timing summaries on the step bar.
+
+### Debugging a Slow Pipeline
+
+```python
+from tldm import tldm
+
+with tldm(files, desc="pipeline") as pbar:
+  for path in pbar:
+    pbar.mark("load")
+    with pbar.section("parse"):
+      doc = parse_file(path)
+    with pbar.section("transform"):
+      result = transform(doc)
+    with pbar.section("write"):
+      save_result(result)
+```
+
+This is useful when you want the bar itself to show where time is going without opening a profiler first.
+
+### Expressive Custom Bar Format
+
+```python
+from tldm import tldm
+
+with tldm(
+  range(100),
+  metric_window=10,
+  cpu_time=True,
+  bar_format="{l_bar}{bar}{r_bar} | phase {active_phase} | loss {metrics[loss]:.4f} | cpu {cpu_elapsed}",
+) as pbar:
+  for step in pbar:
+    with pbar.section("train_step"):
+      loss = train_step(step)
+    pbar.set_metrics(loss=loss)
+```
+
+This pattern works well with AI-generated scripts because the interesting state is exposed directly through `bar_format`.
+
 ---
 
 ## Parameters
@@ -283,6 +338,12 @@ for i in tldm(range(1000000), unit="B", unit_scale=True, unit_divisor=1024):
 - **cpu_time** : bool, optional
   If True, track process CPU time and expose `cpu_elapsed` and `cpu_elapsed_s` for custom `bar_format` strings. Wall-clock timing still drives the default elapsed, ETA, and rate display [default: False].
 
+- **metric_window** : int, optional
+  If set, numeric values passed to `set_metrics(...)` are smoothed over the most recent `metric_window` updates before being displayed.
+
+- **summary** : bool, optional
+  If True, print a one-line final summary after the bar finishes using any active metric and timing summaries.
+
 ---
 
 ## Methods
@@ -335,27 +396,150 @@ with trange(10) as t:
         sleep(0.1)
 ```
 
-If your application already knows how many bytes it just read or wrote, you can also show manual throughput using the existing postfix API.
+`set_postfix(...)` is still useful for arbitrary display-only values, but named per-second counters now have a dedicated helper.
+
+### `set_throughput(ordered_dict=None, refresh=True, elapsed_s=None, **kwargs)`
+
+Set named throughput values measured in units per second. If `elapsed_s` is omitted, `tldm` uses the wall-clock time since the previous throughput update. If `metric_window` is set on the bar, throughput values are displayed as a rolling average over the most recent updates while `throughput_raw` keeps the latest instantaneous rate.
 
 ```python
 from tldm import tldm
-from time import perf_counter
-
-last_t = perf_counter()
 
 with tldm(range(100)) as pbar:
     for item in pbar:
         read_bytes, write_bytes = process_item(item)
-        now = perf_counter()
-        dt = max(now - last_t, 1e-9)
-        pbar.set_postfix(
-            read=f"{read_bytes / dt / 1e6:0.1f}MB/s",
-            write=f"{write_bytes / dt / 1e6:0.1f}MB/s",
-        )
-        last_t = now
+    pbar.set_throughput(read_mb=read_bytes / 1e6, write_mb=write_bytes / 1e6)
 ```
 
-This keeps the core API smaller while still supporting I/O-heavy workflows.
+Throughput data is also exposed through `bar_format` via `throughput`, `throughput_raw`, and `throughput_fmt`.
+
+```python
+from tldm import tldm
+
+with tldm(
+  range(10),
+  metric_window=5,
+  bar_format="{l_bar}{bar}{r_bar} | samples {throughput[samples]:.1f}/s raw {throughput_raw[samples]:.1f}/s",
+) as pbar:
+  for batch in pbar:
+    pbar.set_throughput(samples=len(batch))
+```
+
+### `set_metrics(ordered_dict=None, refresh=True, **kwargs)`
+
+Set training or debugging metrics with stable formatting. If `metric_window` is set on the bar, numeric metrics are displayed as a rolling average over the most recent updates.
+
+```python
+from tldm import tldm
+
+with tldm(range(100), metric_window=20, desc="train") as pbar:
+  for batch in pbar:
+    loss, acc, lr = train_step(batch)
+    pbar.set_metrics(loss=loss, acc=acc, lr=lr)
+```
+
+Metrics are also exposed through `bar_format` via `metrics`, `metrics_raw`, and `metrics_fmt`.
+
+```python
+from tldm import tldm
+
+with tldm(
+  range(10),
+  metric_window=5,
+  bar_format="{l_bar}{bar}{r_bar} | loss {metrics[loss]:.4f} acc {metrics[acc]:.3f}",
+) as pbar:
+  for batch in pbar:
+    loss, acc = train_step(batch)
+    pbar.set_metrics(loss=loss, acc=acc)
+```
+
+### `mark(name, refresh=True)` and `section(name, refresh=True)`
+
+Record timing checkpoints or measure named code sections without leaving the progress-bar workflow.
+
+```python
+from tldm import tldm
+
+with tldm(range(100), desc="debug") as pbar:
+  for item in pbar:
+    pbar.mark("fetch")
+    with pbar.section("transform"):
+      transform(item)
+    with pbar.section("write"):
+      write(item)
+```
+
+By default, named timings are merged into the bar's postfix using average wall-clock time per name.
+
+While a `section(...)` block is active, the default bar also shows `phase=<name>`, and the live section name is exposed through `active_phase` for custom `bar_format` strings.
+
+Timing data is also exposed through `bar_format` via `timings` and `timings_fmt`.
+
+```python
+from tldm import tldm
+
+with tldm(
+  range(10),
+  bar_format="{l_bar}{bar}{r_bar} | phase {active_phase} | load {timings[load][avg]:.3f}s forward {timings[forward][avg]:.3f}s",
+) as pbar:
+  for item in pbar:
+    pbar.mark("load")
+    with pbar.section("forward"):
+      run_forward(item)
+```
+
+### `training_tldm(epochs, steps_per_epoch=None, **kwargs)`
+
+Create a lightweight training-oriented wrapper around nested epoch and step bars.
+
+```python
+from tldm import training_tldm
+
+with training_tldm(epochs=3, steps_per_epoch=len(loader), desc="train") as trainer:
+  for epoch in trainer.epochs():
+    for batch in trainer.steps(loader):
+      trainer.set_metrics(loss=compute_loss(batch), lr=1e-4)
+      with trainer.section("forward"):
+        run_forward(batch)
+```
+
+This keeps the epoch bar on the outer line, creates a step bar on the next line, and forwards `set_metrics(...)`, `set_throughput(...)`, `summary_dict()`, `mark(...)`, and `section(...)` to the active step bar.
+
+### Final Summaries
+
+If you want a compact summary after the bar completes, enable `summary=True`.
+
+```python
+from tldm import tldm
+
+with tldm(range(100), metric_window=10, summary=True, desc="train") as pbar:
+  for batch in pbar:
+    with pbar.section("forward"):
+      loss = train_step(batch)
+    pbar.set_metrics(loss=loss)
+```
+
+This leaves the normal final bar in place and then prints a summary line with elapsed wall time, displayed throughput and metrics, raw smoothed values when they differ, and per-phase average/total/count values. For example: `train summary: elapsed=12.4s, samples/s=812, samples/s_raw=940, loss=0.4213, loss_raw=0.4389, forward_avg=18.2ms, forward_total=9.1s, forward_count=500`.
+
+### `summary_dict()`
+
+If you want the same summary state as structured data instead of a printed line, call `summary_dict()`.
+
+```python
+from tldm import tldm
+
+with tldm(range(100), metric_window=10, desc="train") as pbar:
+  for batch in pbar:
+    with pbar.section("forward"):
+      loss = train_step(batch)
+    pbar.set_metrics(loss=loss)
+    pbar.set_throughput(samples=len(batch))
+
+summary = pbar.summary_dict()
+print(summary["metrics"]["loss"], summary["timings"]["forward"]["avg_s"])
+```
+
+The returned dictionary includes elapsed wall time, optional CPU time, displayed and raw metrics, displayed and raw throughput, active phase, and per-section timing stats with both numeric seconds and display-ready strings.
 
 ### Custom CPU Time Display
 
@@ -670,6 +854,18 @@ with trange(10) as t:
         t.set_postfix(loss=random(), gen=randint(1, 999), str='h', lst=[1, 2])
         sleep(0.1)
 ```
+
+    The higher-level metric and timing helpers build on the same display surface:
+
+    ```python
+    from tldm import tldm
+
+    with tldm(range(5), metric_window=3, desc="debug") as pbar:
+      for step in pbar:
+        with pbar.section("work"):
+          value = run_step(step)
+        pbar.set_metrics(loss=value, refresh=False)
+    ```
 
 You can also use a custom `bar_format`:
 
