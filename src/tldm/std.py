@@ -567,6 +567,7 @@ class tldm(Generic[T]):
         self.timings_fmt = ""
         self._last_mark_t: float | None = None
         self._last_cpu_mark_t: float | None = None
+        self._active_sections: list[str] = []
         self.colour = colour
         self._time = time
         self.cpu_time = cpu_time
@@ -1069,6 +1070,7 @@ class tldm(Generic[T]):
         self.timings_fmt = ""
         self._last_mark_t = None
         self._last_cpu_mark_t = None
+        self._active_sections = []
         self.refresh()
 
     def set_description(self, desc: str | None = None, refresh: bool = True) -> None:
@@ -1176,9 +1178,14 @@ class tldm(Generic[T]):
         """Measure a named code section and record its duration."""
         start_t = self._time()
         start_cpu_t = self._cpu_time() if self._cpu_time is not None else None
+        self._active_sections.append(name)
+        if refresh:
+            self.refresh()
         try:
             yield
         finally:
+            if self._active_sections:
+                self._active_sections.pop()
             end_t = self._time()
             cpu_elapsed_s = None
             if self._cpu_time is not None and start_cpu_t is not None:
@@ -1314,7 +1321,10 @@ class tldm(Generic[T]):
         if self._cpu_time is not None and self.cpu_start_t is not None:
             cpu_elapsed_s = self._cpu_time() - self.cpu_start_t
         display_postfix = self.postfix
+        active_phase = self._active_sections[-1] if self._active_sections else None
         display_parts: list[Any] = []
+        if active_phase:
+            display_parts.append(f"phase={active_phase}")
         if self.timings_fmt:
             display_parts.append(self.timings_fmt)
         if self.metrics_fmt:
@@ -1344,6 +1354,7 @@ class tldm(Generic[T]):
             "rate": self._ema_dn() / self._ema_dt() if self._ema_dt() else None,  # type: ignore[call-arg]
             "bar_format": self.bar_format,
             "postfix": display_postfix,
+            "active_phase": active_phase,
             "metrics": metrics,
             "metrics_raw": metrics_raw,
             "metrics_fmt": self.metrics_fmt,

@@ -2050,6 +2050,27 @@ def test_section_records_timing_and_postfix() -> None:
         assert "forward=300.0ms" in our_file.getvalue()
 
 
+def test_section_exposes_active_phase() -> None:
+    """Test the active section is exposed live and cleared on exit."""
+    with closing(StringIO()) as our_file:
+        with tldm(
+            total=1,
+            file=our_file,
+            miniters=1,
+            mininterval=0,
+            bar_format="{active_phase}",
+        ) as t:
+            timer = cpu_timify(t)
+            with t.section("forward"):
+                assert t.format_dict["active_phase"] == "forward"
+                timer.sleep(0.2)
+
+            assert t.format_dict["active_phase"] is None
+            t.update()
+
+        assert "forward" in our_file.getvalue()
+
+
 @contextmanager
 def std_out_err_redirect_tldm(tldm_file=sys.stderr):
     orig_out_err = sys.stdout, sys.stderr

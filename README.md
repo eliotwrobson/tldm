@@ -406,6 +406,8 @@ with tldm(range(100), desc="debug") as pbar:
 
 By default, named timings are merged into the bar's postfix using average wall-clock time per name.
 
+While a `section(...)` block is active, the default bar also shows `phase=<name>`, and the live section name is exposed through `active_phase` for custom `bar_format` strings.
+
 Timing data is also exposed through `bar_format` via `timings` and `timings_fmt`.
 
 ```python
@@ -413,7 +415,7 @@ from tldm import tldm
 
 with tldm(
   range(10),
-  bar_format="{l_bar}{bar}{r_bar} | load {timings[load][avg]:.3f}s forward {timings[forward][avg]:.3f}s",
+  bar_format="{l_bar}{bar}{r_bar} | phase {active_phase} | load {timings[load][avg]:.3f}s forward {timings[forward][avg]:.3f}s",
 ) as pbar:
   for item in pbar:
     pbar.mark("load")
