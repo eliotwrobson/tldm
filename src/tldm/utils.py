@@ -4,7 +4,6 @@ General helpers required for `tldm.std`.
 
 import contextlib
 import math
-import numbers
 import os
 import re
 import sys
@@ -547,7 +546,7 @@ def format_interval(t: float) -> str:
         return f"{sign}{m:02d}:{s:02d}"
 
 
-def format_num(n: numbers.Real) -> str:
+def format_num(n: int | float) -> str:
     """
     Intelligent scientific notation (.3g).
 
