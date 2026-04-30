@@ -6,8 +6,6 @@ These tests serve two purposes:
 2. Compare tldm's speed against alternatives (if installed)
 """
 
-import os
-
 import pytest
 from alive_progress import alive_bar
 from progressbar import progressbar
@@ -16,10 +14,7 @@ from rich.progress import track
 from tldm import tldm
 
 
-pytestmark = pytest.mark.skipif(
-    os.environ.get("TLDM_RUN_PERF") != "1",
-    reason="benchmark tests are opt-in; set TLDM_RUN_PERF=1 to run them",
-)
+pytestmark = pytest.mark.perf
 
 
 class TestTldmPerformance:

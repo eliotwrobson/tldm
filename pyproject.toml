@@ -152,9 +152,9 @@ files = ["src/tldm/std.py", "src/tldm/utils.py", "src/tldm/aliases.py"]
 [tool.pytest.ini_options]
 timeout = 30
 log_level = "INFO"
-markers = ["asyncio", "slow"]
+markers = ["asyncio", "slow", "perf: performance and benchmark tests"]
 testpaths = ["tests"]
-addopts = "-v --tb=short -rxs -W=error --durations=0 --durations-min=0.1 --asyncio-mode=strict"
+addopts = "-v --tb=short -rxs -W=error --durations=0 --durations-min=0.1 --asyncio-mode=strict -m 'not perf'"
 asyncio_default_fixture_loop_scope = "function"
 
 [tool.coverage.run]

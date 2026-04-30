@@ -64,7 +64,7 @@ Performance and benchmark tests are opt-in because they are noisier and more env
 
 ```bash
 make pytest-perf
-# or: TLDM_RUN_PERF=1 uv run pytest tests/test_perf.py tests/test_benchmark.py
+# or: uv run pytest -m perf tests/test_perf.py tests/test_benchmark.py
 ```
 
 For day-to-day development, `make pytest` and `make pytest-cov` intentionally skip these perf-focused modules.

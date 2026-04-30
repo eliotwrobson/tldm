@@ -1,4 +1,3 @@
-import os
 import sys
 from contextlib import contextmanager
 from platform import system
@@ -13,10 +12,7 @@ from tldm import tldm, trange
 from .conftest import patch_lock
 
 
-pytestmark = mark.skipif(
-    os.environ.get("TLDM_RUN_PERF") != "1",
-    reason="performance tests are opt-in; set TLDM_RUN_PERF=1 to run them",
-)
+pytestmark = mark.perf
 
 
 def cpu_sleep(t):

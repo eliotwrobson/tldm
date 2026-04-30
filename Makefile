@@ -47,7 +47,7 @@ pytest-cov:
 
 pytest-perf:
 	@echo "Running opt-in performance tests..."
-	TLDM_RUN_PERF=1 uv run pytest tests/test_perf.py tests/test_benchmark.py
+	uv run pytest -m perf tests/test_perf.py tests/test_benchmark.py
 
 test: pytest
 

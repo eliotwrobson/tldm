@@ -1,0 +1,19 @@
+name: Performance
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  perf:
+    name: Python 3.12 - ubuntu-latest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+      - name: Run performance tests
+        run: make pytest-perf
