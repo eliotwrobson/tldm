@@ -335,22 +335,44 @@ with trange(10) as t:
         sleep(0.1)
 ```
 
-    ### Custom CPU Time Display
+If your application already knows how many bytes it just read or wrote, you can also show manual throughput using the existing postfix API.
 
-    If you want to show process CPU time alongside the usual wall-clock stats, enable `cpu_time=True` and reference the injected fields from `bar_format`.
+```python
+from tldm import tldm
+from time import perf_counter
 
-    ```python
-    from tldm import tldm
+last_t = perf_counter()
 
-    for _ in tldm(
-      range(100),
-      cpu_time=True,
-      bar_format="{l_bar}{bar}{r_bar} [cpu {cpu_elapsed}]",
-    ):
-      pass
-    ```
+with tldm(range(100)) as pbar:
+    for item in pbar:
+        read_bytes, write_bytes = process_item(item)
+        now = perf_counter()
+        dt = max(now - last_t, 1e-9)
+        pbar.set_postfix(
+            read=f"{read_bytes / dt / 1e6:0.1f}MB/s",
+            write=f"{write_bytes / dt / 1e6:0.1f}MB/s",
+        )
+        last_t = now
+```
 
-    This is most useful for CPU-bound work. ETA and rate still use wall-clock time.
+This keeps the core API smaller while still supporting I/O-heavy workflows.
+
+### Custom CPU Time Display
+
+If you want to show process CPU time alongside the usual wall-clock stats, enable `cpu_time=True` and reference the injected fields from `bar_format`.
+
+```python
+from tldm import tldm
+
+for _ in tldm(
+    range(100),
+    cpu_time=True,
+    bar_format="{l_bar}{bar}{r_bar} [cpu {cpu_elapsed}]",
+):
+    pass
+```
+
+This is most useful for CPU-bound work. ETA and rate still use wall-clock time.
 
 ### `print(*values, file=sys.stdout, sep=" ", end="\n", flush=False)`
 
