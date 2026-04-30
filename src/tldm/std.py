@@ -6,12 +6,12 @@ Includes a default `range` iterator printing to `stderr`.
 import copy
 import signal
 import sys
-from collections import OrderedDict, defaultdict
+from collections import OrderedDict, defaultdict, deque
 from collections.abc import Iterable, Iterator
 from contextlib import AbstractContextManager, contextmanager, suppress
 from functools import total_ordering
 from multiprocessing import RLock
-from numbers import Number
+from numbers import Number, Real
 from operator import length_hint
 from threading import RLock as TRLock
 from time import process_time, time
@@ -453,6 +453,7 @@ class tldm(Generic[T]):
         delay: float = 0.0,
         title: bool = False,
         cpu_time: bool = False,
+        metric_window: int | None = None,
         complete_bar_on_early_finish: bool = False,
         **kwargs: Any,
     ) -> None:
@@ -533,6 +534,7 @@ class tldm(Generic[T]):
         self.initial = initial
         self.lock_args = lock_args
         self.delay = delay
+        self.metric_window = metric_window
         self.force_dynamic_ncols_update = force_dynamic_ncols_update
         self.dynamic_ncols_func = dynamic_ncols_func
         # Register signal handler for window resize if dynamic ncols is enabled
@@ -544,6 +546,10 @@ class tldm(Generic[T]):
         self._ema_miniters = get_ema_func(smoothing)
         self.bar_format = bar_format
         self.postfix = None
+        self.metrics: dict[str, Any] = {}
+        self.metrics_raw: dict[str, Any] = {}
+        self.metrics_fmt = ""
+        self._metric_history: dict[str, deque[float]] = {}
         self.colour = colour
         self._time = time
         self.cpu_time = cpu_time
@@ -1060,6 +1066,73 @@ class tldm(Generic[T]):
         if refresh:
             self.refresh()
 
+    @staticmethod
+    def _format_metric_value(value: Any) -> str:
+        if isinstance(value, bool):
+            return str(value)
+        if isinstance(value, int):
+            return str(value)
+        if isinstance(value, Real):
+            value = float(value)
+            abs_value = abs(value)
+            if abs_value == 0:
+                return "0"
+            if 1e-4 <= abs_value < 1e4:
+                return f"{value:.4f}".rstrip("0").rstrip(".")
+            return f"{value:.3e}"
+        if not isinstance(value, str):
+            return str(value)
+        return value.strip()
+
+    def set_metrics(
+        self,
+        ordered_dict: dict | None = None,
+        refresh: bool = True,
+        **kwargs: Any,
+    ) -> None:
+        """Set or update training/debug metrics displayed with the bar.
+
+        Numeric metrics can optionally be smoothed using a rolling window
+        when `metric_window` is set on the progress bar.
+
+        Parameters
+        ----------
+        ordered_dict  : dict, optional
+        refresh  : bool, optional
+            Forces refresh [default: True].
+        kwargs  : dict, optional
+        """
+        metrics = {} if ordered_dict is None else dict(ordered_dict)
+        for key in sorted(kwargs.keys()):
+            metrics[key] = kwargs[key]
+
+        display_metrics: dict[str, Any] = {}
+        raw_metrics: dict[str, Any] = {}
+        active_keys = set(metrics.keys())
+
+        for stale_key in tuple(self._metric_history.keys()):
+            if stale_key not in active_keys:
+                self._metric_history.pop(stale_key, None)
+
+        for key, raw_value in metrics.items():
+            raw_metrics[key] = raw_value
+            display_value = raw_value
+            if self.metric_window and isinstance(raw_value, Real) and not isinstance(raw_value, bool):
+                history = self._metric_history.setdefault(key, deque(maxlen=self.metric_window))
+                history.append(float(raw_value))
+                display_value = sum(history) / len(history)
+            else:
+                self._metric_history.pop(key, None)
+            display_metrics[key] = display_value
+
+        self.metrics = display_metrics
+        self.metrics_raw = raw_metrics
+        self.metrics_fmt = ", ".join(
+            f"{key}={self._format_metric_value(value)}" for key, value in self.metrics.items()
+        )
+        if refresh:
+            self.refresh()
+
     def set_postfix(
         self,
         ordered_dict: dict | None = None,
@@ -1122,6 +1195,14 @@ class tldm(Generic[T]):
         cpu_elapsed_s = None
         if self._cpu_time is not None and self.cpu_start_t is not None:
             cpu_elapsed_s = self._cpu_time() - self.cpu_start_t
+        display_postfix = self.postfix
+        if self.metrics_fmt:
+            if display_postfix is None:
+                display_postfix = self.metrics_fmt
+            elif isinstance(display_postfix, str):
+                display_postfix = ", ".join(filter(None, [self.metrics_fmt, display_postfix]))
+        metrics = defaultdict(float, self.metrics)
+        metrics_raw = defaultdict(float, self.metrics_raw)
         return {
             "n": self.n,
             "total": self.total,
@@ -1136,7 +1217,10 @@ class tldm(Generic[T]):
             "unit_scale": self.unit_scale,
             "rate": self._ema_dn() / self._ema_dt() if self._ema_dt() else None,  # type: ignore[call-arg]
             "bar_format": self.bar_format,
-            "postfix": self.postfix,
+            "postfix": display_postfix,
+            "metrics": metrics,
+            "metrics_raw": metrics_raw,
+            "metrics_fmt": self.metrics_fmt,
             "unit_divisor": self.unit_divisor,
             "initial": self.initial,
             "colour": self.colour,

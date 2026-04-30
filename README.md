@@ -283,6 +283,9 @@ for i in tldm(range(1000000), unit="B", unit_scale=True, unit_divisor=1024):
 - **cpu_time** : bool, optional
   If True, track process CPU time and expose `cpu_elapsed` and `cpu_elapsed_s` for custom `bar_format` strings. Wall-clock timing still drives the default elapsed, ETA, and rate display [default: False].
 
+- **metric_window** : int, optional
+  If set, numeric values passed to `set_metrics(...)` are smoothed over the most recent `metric_window` updates before being displayed.
+
 ---
 
 ## Methods
@@ -356,6 +359,34 @@ with tldm(range(100)) as pbar:
 ```
 
 This keeps the core API smaller while still supporting I/O-heavy workflows.
+
+### `set_metrics(ordered_dict=None, refresh=True, **kwargs)`
+
+Set training or debugging metrics with stable formatting. If `metric_window` is set on the bar, numeric metrics are displayed as a rolling average over the most recent updates.
+
+```python
+from tldm import tldm
+
+with tldm(range(100), metric_window=20, desc="train") as pbar:
+  for batch in pbar:
+    loss, acc, lr = train_step(batch)
+    pbar.set_metrics(loss=loss, acc=acc, lr=lr)
+```
+
+Metrics are also exposed through `bar_format` via `metrics`, `metrics_raw`, and `metrics_fmt`.
+
+```python
+from tldm import tldm
+
+with tldm(
+  range(10),
+  metric_window=5,
+  bar_format="{l_bar}{bar}{r_bar} | loss {metrics[loss]:.4f} acc {metrics[acc]:.3f}",
+) as pbar:
+  for batch in pbar:
+    loss, acc = train_step(batch)
+    pbar.set_metrics(loss=loss, acc=acc)
+```
 
 ### Custom CPU Time Display
 

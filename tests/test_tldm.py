@@ -1979,6 +1979,39 @@ def test_postfix_direct() -> None:
         assert "j  8.00" in res
 
 
+def test_set_metrics() -> None:
+    """Test metric display and postfix combination."""
+    with closing(StringIO()) as our_file:
+        with tldm(total=2, file=our_file, miniters=1, mininterval=0) as t:
+            t.set_postfix(stage="train", refresh=False)
+            t.set_metrics(loss=0.4321, lr=1e-4, refresh=False)
+            t.update()
+
+        res = our_file.getvalue()
+        assert "loss=0.4321" in res
+        assert "lr=0.0001" in res
+        assert "stage=train" in res
+
+
+def test_set_metrics_smoothed() -> None:
+    """Test rolling smoothing for numeric metrics."""
+    with closing(StringIO()) as our_file:
+        with tldm(
+            total=2,
+            file=our_file,
+            miniters=1,
+            mininterval=0,
+            metric_window=2,
+            bar_format="{metrics[loss]:.2f}|{metrics[acc]:.2f}",
+        ) as t:
+            t.set_metrics(loss=1.0, acc=0.5, refresh=False)
+            t.update()
+            t.set_metrics(loss=3.0, acc=1.0, refresh=False)
+            t.update()
+
+        assert "2.00|0.75" in our_file.getvalue()
+
+
 @contextmanager
 def std_out_err_redirect_tldm(tldm_file=sys.stderr):
     orig_out_err = sys.stdout, sys.stderr
