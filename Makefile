@@ -1,4 +1,4 @@
-.PHONY: help mypy ruff ruff-format ruff-check format lint pytest pytest-cov test all install install-dev clean
+.PHONY: help mypy ruff ruff-format ruff-check format lint pytest pytest-cov pytest-perf test all install install-dev clean
 
 help:
 	@echo "Available commands:"
@@ -10,6 +10,7 @@ help:
 	@echo "  make lint          - Run ruff linting and mypy type checking"
 	@echo "  make pytest        - Run pytest without coverage"
 	@echo "  make pytest-cov    - Run pytest with coverage reports"
+	@echo "  make pytest-perf   - Run opt-in performance and benchmark tests"
 	@echo "  make test          - Alias for pytest"
 	@echo "  make all           - Run formatting, linting, and tests with coverage"
 	@echo "  make install       - Install the package"
@@ -43,6 +44,10 @@ pytest:
 pytest-cov:
 	@echo "Running pytest with coverage..."
 	uv run pytest --cov=tldm --cov-report=xml --cov-report=term --cov-report=html
+
+pytest-perf:
+	@echo "Running opt-in performance tests..."
+	TLDM_RUN_PERF=1 uv run pytest tests/test_perf.py tests/test_benchmark.py
 
 test: pytest
 

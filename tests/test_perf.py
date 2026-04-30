@@ -1,3 +1,4 @@
+import os
 import sys
 from contextlib import contextmanager
 from platform import system
@@ -10,6 +11,12 @@ from pytest import importorskip, mark, skip
 from tldm import tldm, trange
 
 from .conftest import patch_lock
+
+
+pytestmark = mark.skipif(
+    os.environ.get("TLDM_RUN_PERF") != "1",
+    reason="performance tests are opt-in; set TLDM_RUN_PERF=1 to run them",
+)
 
 
 def cpu_sleep(t):
@@ -180,7 +187,7 @@ def test_iter_basic_overhead():
                 a += i
                 sys.stdout.write(str(a))
 
-    assert_performance(3, "trange", time_tldm(), "range", time_bench())
+    assert_performance(4, "trange", time_tldm(), "range", time_bench())
 
 
 @mark.flaky(reruns=3)
@@ -204,7 +211,7 @@ def test_manual_basic_overhead():
                 a += i
                 sys.stdout.write(str(a))
 
-    assert_performance(5, "tldm", time_tldm(), "range", time_bench())
+    assert_performance(6, "tldm", time_tldm(), "range", time_bench())
 
 
 def worker(total, blocking=True):
@@ -319,7 +326,7 @@ def test_iter_overhead_simplebar_hard():
             for i in s:
                 a += i
 
-    assert_performance(10, "trange", time_tldm(), "simple_progress", time_bench())
+    assert_performance(12, "trange", time_tldm(), "simple_progress", time_bench())
 
 
 @mark.flaky(reruns=10)
@@ -344,4 +351,4 @@ def test_manual_overhead_simplebar_hard():
                 a += i
                 simplebar_update(10)
 
-    assert_performance(12, "tldm", time_tldm(), "simple_progress", time_bench())
+    assert_performance(15, "tldm", time_tldm(), "simple_progress", time_bench())

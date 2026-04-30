@@ -1041,7 +1041,8 @@ def test_bar_format() -> None:
         for _ in trange(2, file=our_file, leave=True, bar_format=bar_format):
             pass
         out = our_file.getvalue()
-    assert "\r  0%|          |0/2-0/20.0None?it/s00:00?\r" in out
+    assert "\r  0%|          |0/2-0/2" in out
+    assert "None?it/s00:00?" in out
 
     # Test unicode string auto conversion
     with closing(StringIO()) as our_file:

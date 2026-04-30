@@ -60,6 +60,15 @@ make pytest
 # or: uv run pytest
 ```
 
+Performance and benchmark tests are opt-in because they are noisier and more environment-sensitive than the main suite. To run them explicitly, use:
+
+```bash
+make pytest-perf
+# or: TLDM_RUN_PERF=1 uv run pytest tests/test_perf.py tests/test_benchmark.py
+```
+
+For day-to-day development, `make pytest` and `make pytest-cov` intentionally skip these perf-focused modules.
+
 4. **Code Coverage**: Please ensure your changes are covered by tests. Run tests with coverage:
 
 ```bash
@@ -100,6 +109,7 @@ The project includes a Makefile with convenient shortcuts. Run `make help` to se
 - `make mypy` - Run mypy type checking only
 - `make pytest` - Run pytest without coverage
 - `make pytest-cov` - Run pytest with coverage reports
+- `make pytest-perf` - Run opt-in performance and benchmark tests
 - `make all` - Run formatting, linting, and tests with coverage
 - `make clean` - Clean up build artifacts and cache files
 
