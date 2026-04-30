@@ -113,6 +113,9 @@ class TrainingTldm(Generic[T]):
     def set_throughput(self, *args: Any, **kwargs: Any) -> None:
         self._active_bar().set_throughput(*args, **kwargs)
 
+    def summary_dict(self) -> dict[str, Any]:
+        return self._active_bar().summary_dict()
+
     def mark(self, *args: Any, **kwargs: Any) -> None:
         self._active_bar().mark(*args, **kwargs)
 

@@ -956,45 +956,114 @@ class tldm(Generic[T]):
             self.display(pos=0)
             self.fp.write("\n")
 
-    def _get_summary_message(self) -> str | None:
-        if not self.summary:
-            return None
-
-        summary_parts: list[str] = []
+    def summary_dict(self) -> dict[str, Any]:
+        """Return the current summary state as plain data."""
         elapsed_s = self._time() - self.start_t if hasattr(self, "start_t") else None
-        if elapsed_s is not None:
-            summary_parts.append(f"elapsed={self._format_timing_value(elapsed_s)}")
+        cpu_elapsed_s = None
+        if self.cpu_time and self._cpu_time is not None and self.cpu_start_t is not None:
+            cpu_elapsed_s = self._cpu_time() - self.cpu_start_t
 
-        for key, value in self.throughput.items():
-            summary_parts.append(f"{key}/s={self._format_throughput_value(value)}")
-            raw_value = self.throughput_raw.get(key)
-            if raw_value is not None and raw_value != value:
-                summary_parts.append(f"{key}/s_raw={self._format_throughput_value(raw_value)}")
-
-        for key, value in self.metrics.items():
-            summary_parts.append(f"{key}={self._format_metric_value(value)}")
-            raw_value = self.metrics_raw.get(key)
-            if raw_value != value:
-                summary_parts.append(f"{key}_raw={self._format_metric_value(raw_value)}")
-
+        timings: dict[str, dict[str, Any]] = {}
         for name, stats in self.timings.items():
             count = cast(int, stats["count"])
             if not count:
                 continue
-            summary_parts.append(
-                f"{name}_avg={self._format_timing_value(cast(float, stats['avg']))}"
-            )
-            summary_parts.append(
-                f"{name}_total={self._format_timing_value(cast(float, stats['total']))}"
-            )
-            summary_parts.append(f"{name}_count={count}")
+            timing_entry: dict[str, Any] = {
+                "count": count,
+                "last_s": cast(float | None, stats["last"]),
+                "last": self._format_timing_value(cast(float | None, stats["last"])),
+                "avg_s": cast(float | None, stats["avg"]),
+                "avg": self._format_timing_value(cast(float | None, stats["avg"])),
+                "total_s": cast(float, stats["total"]),
+                "total": self._format_timing_value(cast(float, stats["total"])),
+            }
+            cpu_last_s = cast(float | None, stats["cpu_last"])
+            cpu_avg_s = cast(float | None, stats["cpu_avg"])
+            cpu_total_s = cast(float | None, stats["cpu_total"])
+            if cpu_last_s is not None:
+                timing_entry["cpu_last_s"] = cpu_last_s
+                timing_entry["cpu_last"] = self._format_timing_value(cpu_last_s)
+            if cpu_avg_s is not None:
+                timing_entry["cpu_avg_s"] = cpu_avg_s
+                timing_entry["cpu_avg"] = self._format_timing_value(cpu_avg_s)
+            if cpu_total_s is not None:
+                timing_entry["cpu_total_s"] = cpu_total_s
+                timing_entry["cpu_total"] = self._format_timing_value(cpu_total_s)
+            timings[name] = timing_entry
 
-        if self.cpu_time and self._cpu_time is not None and self.cpu_start_t is not None:
-            summary_parts.append(f"cpu={format_interval(self._cpu_time() - self.cpu_start_t)}")
+        summary_prefix = self.desc[:-2] if self.desc.endswith(": ") else self.desc
+        return {
+            "desc": summary_prefix or None,
+            "n": self.n,
+            "total": self.total,
+            "active_phase": self._active_sections[-1] if self._active_sections else None,
+            "elapsed_s": elapsed_s,
+            "elapsed": self._format_timing_value(elapsed_s) if elapsed_s is not None else None,
+            "cpu_elapsed_s": cpu_elapsed_s,
+            "cpu_elapsed": format_interval(cpu_elapsed_s) if cpu_elapsed_s is not None else None,
+            "throughput": dict(self.throughput),
+            "throughput_raw": dict(self.throughput_raw),
+            "throughput_display": {
+                key: self._format_throughput_value(value) for key, value in self.throughput.items()
+            },
+            "throughput_raw_display": {
+                key: self._format_throughput_value(value)
+                for key, value in self.throughput_raw.items()
+            },
+            "metrics": dict(self.metrics),
+            "metrics_raw": dict(self.metrics_raw),
+            "metrics_display": {
+                key: self._format_metric_value(value) for key, value in self.metrics.items()
+            },
+            "metrics_raw_display": {
+                key: self._format_metric_value(value) for key, value in self.metrics_raw.items()
+            },
+            "timings": timings,
+        }
+
+    def _get_summary_message(self) -> str | None:
+        if not self.summary:
+            return None
+
+        summary = self.summary_dict()
+        summary_parts: list[str] = []
+        elapsed = summary["elapsed"]
+        if elapsed is not None:
+            summary_parts.append(f"elapsed={elapsed}")
+
+        throughput = cast(dict[str, float], summary["throughput"])
+        throughput_display = cast(dict[str, str], summary["throughput_display"])
+        throughput_raw = cast(dict[str, float], summary["throughput_raw"])
+        throughput_raw_display = cast(dict[str, str], summary["throughput_raw_display"])
+        for key, value in throughput.items():
+            summary_parts.append(f"{key}/s={throughput_display[key]}")
+            raw_value = throughput_raw.get(key)
+            if raw_value is not None and raw_value != value:
+                summary_parts.append(f"{key}/s_raw={throughput_raw_display[key]}")
+
+        metrics = cast(dict[str, Any], summary["metrics"])
+        metrics_display = cast(dict[str, str], summary["metrics_display"])
+        metrics_raw = cast(dict[str, Any], summary["metrics_raw"])
+        metrics_raw_display = cast(dict[str, str], summary["metrics_raw_display"])
+        for key, value in metrics.items():
+            summary_parts.append(f"{key}={metrics_display[key]}")
+            raw_value = metrics_raw.get(key)
+            if raw_value != value:
+                summary_parts.append(f"{key}_raw={metrics_raw_display[key]}")
+
+        timings = cast(dict[str, dict[str, Any]], summary["timings"])
+        for name, stats in timings.items():
+            summary_parts.append(f"{name}_avg={stats['avg']}")
+            summary_parts.append(f"{name}_total={stats['total']}")
+            summary_parts.append(f"{name}_count={stats['count']}")
+
+        cpu_elapsed = summary["cpu_elapsed"]
+        if cpu_elapsed is not None:
+            summary_parts.append(f"cpu={cpu_elapsed}")
         if not summary_parts:
             return None
 
-        summary_prefix = self.desc[:-2] if self.desc.endswith(": ") else self.desc
+        summary_prefix = cast(str | None, summary["desc"])
         if summary_prefix:
             return f"{summary_prefix} summary: " + ", ".join(summary_parts)
         return "summary: " + ", ".join(summary_parts)

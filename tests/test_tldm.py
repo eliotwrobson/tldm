@@ -2137,6 +2137,58 @@ def test_final_summary_output() -> None:
         assert "forward_count=1" in res
 
 
+def test_summary_dict() -> None:
+    """Test structured summary export matches the current bar state."""
+    timer = DiscreteTimer()
+    cpu_timer = [0.0]
+
+    with closing(StringIO()) as our_file:
+        with tldm(
+            total=2,
+            file=our_file,
+            miniters=1,
+            mininterval=0,
+            cpu_time=True,
+            metric_window=2,
+            desc="train",
+        ) as t:
+            cpu_timify(t, timer)
+            t._cpu_time = lambda: cpu_timer[0]
+            t.cpu_start_t = cpu_timer[0]
+
+            with t.section("forward", refresh=False):
+                timer.sleep(0.2)
+                cpu_timer[0] = 0.05
+            t.set_metrics(loss=0.4, refresh=False)
+            timer.sleep(0.8)
+            cpu_timer[0] = 0.2
+            t.set_throughput(samples=10, refresh=False)
+            t.update()
+            t.set_metrics(loss=0.6, refresh=False)
+
+            summary = t.summary_dict()
+
+        assert summary["desc"] == "train"
+        assert summary["n"] == 1
+        assert summary["total"] == 2
+        assert summary["elapsed_s"] == 1.0
+        assert summary["elapsed"] == "1.00s"
+        assert summary["cpu_elapsed_s"] == 0.2
+        assert summary["cpu_elapsed"] == "00:00"
+        assert summary["throughput"]["samples"] == 10.0
+        assert summary["throughput_raw"]["samples"] == 10.0
+        assert summary["throughput_display"]["samples"] == "10"
+        assert summary["metrics"]["loss"] == 0.5
+        assert summary["metrics_raw"]["loss"] == 0.6
+        assert summary["metrics_display"]["loss"] == "0.5"
+        assert summary["metrics_raw_display"]["loss"] == "0.6"
+        assert summary["timings"]["forward"]["count"] == 1
+        assert summary["timings"]["forward"]["avg_s"] == 0.2
+        assert summary["timings"]["forward"]["avg"] == "200.0ms"
+        assert summary["timings"]["forward"]["cpu_total_s"] == 0.05
+        assert summary["timings"]["forward"]["cpu_total"] == "50.0ms"
+
+
 def test_final_summary_includes_throughput() -> None:
     """Test final summaries include throughput values and raw throughput when smoothed."""
     with closing(StringIO()) as our_file:
@@ -2240,6 +2292,32 @@ def test_training_tldm_nested_helper() -> None:
         assert "loss=" in res
         assert "samples/s=64" in res
         assert "phase=forward" in res
+
+
+def test_training_tldm_summary_dict_proxy() -> None:
+    """Test the training helper exposes the active bar summary export."""
+    with closing(StringIO()) as our_file:
+        with training_tldm(
+            epochs=1,
+            steps_per_epoch=1,
+            file=our_file,
+            miniters=1,
+            mininterval=0,
+            desc="train",
+        ) as trainer:
+            for _ in trainer.epochs():
+                step_iter = trainer.steps(range(1))
+                assert trainer.step_bar is not None
+                timer = cpu_timify(trainer.step_bar)
+                for _ in step_iter:
+                    timer.sleep(0.5)
+                    trainer.set_throughput(samples=16, refresh=False)
+                    trainer.set_metrics(loss=0.25, refresh=False)
+                    summary = trainer.summary_dict()
+
+        assert summary["throughput"]["samples"] == 32.0
+        assert summary["metrics"]["loss"] == 0.25
+        assert summary["desc"] == "epoch 1/1"
 
 
 @contextmanager

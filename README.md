@@ -503,7 +503,7 @@ with training_tldm(epochs=3, steps_per_epoch=len(loader), desc="train") as train
         run_forward(batch)
 ```
 
-This keeps the epoch bar on the outer line, creates a step bar on the next line, and forwards `set_metrics(...)`, `set_throughput(...)`, `mark(...)`, and `section(...)` to the active step bar.
+This keeps the epoch bar on the outer line, creates a step bar on the next line, and forwards `set_metrics(...)`, `set_throughput(...)`, `summary_dict()`, `mark(...)`, and `section(...)` to the active step bar.
 
 ### Final Summaries
 
@@ -520,6 +520,26 @@ with tldm(range(100), metric_window=10, summary=True, desc="train") as pbar:
 ```
 
 This leaves the normal final bar in place and then prints a summary line with elapsed wall time, displayed throughput and metrics, raw smoothed values when they differ, and per-phase average/total/count values. For example: `train summary: elapsed=12.4s, samples/s=812, samples/s_raw=940, loss=0.4213, loss_raw=0.4389, forward_avg=18.2ms, forward_total=9.1s, forward_count=500`.
+
+### `summary_dict()`
+
+If you want the same summary state as structured data instead of a printed line, call `summary_dict()`.
+
+```python
+from tldm import tldm
+
+with tldm(range(100), metric_window=10, desc="train") as pbar:
+  for batch in pbar:
+    with pbar.section("forward"):
+      loss = train_step(batch)
+    pbar.set_metrics(loss=loss)
+    pbar.set_throughput(samples=len(batch))
+
+summary = pbar.summary_dict()
+print(summary["metrics"]["loss"], summary["timings"]["forward"]["avg_s"])
+```
+
+The returned dictionary includes elapsed wall time, optional CPU time, displayed and raw metrics, displayed and raw throughput, active phase, and per-section timing stats with both numeric seconds and display-ready strings.
 
 ### Custom CPU Time Display
 
