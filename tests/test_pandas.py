@@ -184,6 +184,7 @@ def test_pandas_leave():
     """Test pandas with `leave=True`"""
     with closing(StringIO()) as our_file:
         df = pd.DataFrame(randint(0, 100, (1000, 6)))
+        df[0] = np.tile(np.arange(100), 10)
         tldm_pandas(file=our_file, leave=True, ascii=True)
         df.groupby(0).progress_apply(lambda x: None)
 

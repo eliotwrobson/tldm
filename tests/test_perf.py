@@ -11,7 +11,6 @@ from tldm import tldm, trange
 
 from .conftest import patch_lock
 
-
 pytestmark = mark.perf
 
 

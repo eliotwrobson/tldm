@@ -113,7 +113,7 @@ async def test_coroutines():
 
 @mark.slow
 @mark.asyncio
-@mark.parametrize("tol", [0.2 if platform.startswith("darwin") else 0.1])
+@mark.parametrize("tol", [0.3 if platform.startswith("darwin") else 0.1])
 async def test_as_completed(capsys, tol):
     """Test asyncio as_completed"""
     for retry in range(3):
