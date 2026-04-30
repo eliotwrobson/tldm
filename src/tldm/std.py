@@ -1429,7 +1429,9 @@ class tldm(Generic[T]):
             throughput_raw[key] = raw_value
             display_value = raw_value
             if self.metric_window:
-                history = self._throughput_history.setdefault(key, deque(maxlen=self.metric_window))
+                history = self._throughput_history.setdefault(
+                    key, deque(maxlen=self.metric_window)
+                )
                 if key not in self._throughput_sums:
                     self._throughput_sums[key] = float(sum(history))
                 if len(history) == history.maxlen:
