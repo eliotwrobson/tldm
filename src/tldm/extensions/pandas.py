@@ -27,7 +27,7 @@ def tldm_pandas(**tldm_kwargs: Any) -> None:
     --------
     >>> import pandas as pd
     >>> import numpy as np
-    >>> from tldm import tldm
+    >>> import tldm
     >>>
     >>> df = pd.DataFrame(np.random.randint(0, 100, (100000, 6)))
     >>>

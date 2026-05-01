@@ -35,7 +35,7 @@ def pandas(**tldm_kwargs) -> None:
     Using tldm.pandas():
 
     >>> import pandas as pd
-    >>> from tldm import tldm
+    >>> import tldm
     >>> tldm.pandas(desc="Processing")  # Register with options
     >>> df.progress_apply(lambda x: x**2)
 

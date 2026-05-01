@@ -27,6 +27,8 @@ A progress bar in Python with a focus on simplicity and ease of use. This librar
 
 Works across all major platforms (Linux, Windows, macOS) and in all major environments (terminal, Jupyter notebooks, IPython, etc.).
 
+Beyond drop-in loop wrapping, TL;DM also exposes rolling metrics, named throughput, phase timing, final summaries, training-oriented nested bars, asyncio/concurrent helpers, pandas and rich integrations, logging redirection, and notebook-aware convenience aliases.
+
 ---
 
 ## Table of Contents
@@ -35,11 +37,13 @@ Works across all major platforms (Linux, Windows, macOS) and in all major enviro
 - [Usage](#usage)
   - [Iterable-based](#iterable-based)
   - [Manual Control](#manual-control)
+- [Feature Highlights](#feature-highlights)
 - [Examples](#examples)
 - [Parameters](#parameters)
 - [Methods](#methods)
 - [Convenience Functions](#convenience-functions)
 - [Extensions](#extensions)
+  - [Notebook Support](#notebook-support)
   - [Asyncio](#asyncio)
   - [Pandas Integration](#pandas-integration)
   - [Rich Integration](#rich-integration)
@@ -58,16 +62,30 @@ Works across all major platforms (Linux, Windows, macOS) and in all major enviro
 
 ## Installation
 
+TL;DM currently supports Python 3.11 and newer.
+
 You can install `tldm` via pip:
 
 ```bash
 pip install tldm
 ```
 
+To enable widget-based notebook rendering in Jupyter or IPython, install the optional notebook dependency group:
+
+```bash
+pip install "tldm[notebook]"
+```
+
+Some integrations rely on third-party packages that are installed separately:
+
+```bash
+pip install pandas rich
+```
+
 Latest development release:
 
 ```bash
-pip install "git+https://github.com/eliotwrobson/tldm.git@devel#egg=tldm"
+pip install "git+https://github.com/eliotwrobson/tldm.git@main#egg=tldm"
 ```
 
 ---
@@ -136,6 +154,16 @@ pbar.close()
 
 ---
 
+## Feature Highlights
+
+- `set_metrics(...)`, `set_throughput(...)`, `mark(...)`, and `section(...)` turn a progress bar into a lightweight training or pipeline dashboard.
+- `summary=True` and `summary_dict()` keep the live bar concise while still giving you structured end-of-run metrics and timing data.
+- `training_tldm(...)` manages nested epoch and step bars with shared metrics, throughput, and phase timing helpers.
+- `tldm_asyncio.gather(...)`, `tldm_asyncio.as_completed(...)`, `thread_map(...)`, and `process_map(...)` cover common async and concurrent execution patterns.
+- `auto_tldm`, `trange`, the iterator helpers, and `tldm.pandas()` automatically select notebook widgets when `ipywidgets` is available.
+
+---
+
 ## Examples
 
 ### Simple Loop with Progress Bar
@@ -160,26 +188,16 @@ for i in trange(10, desc='1st loop'):
             sleep(0.01)
 ```
 
-### Parallel Processing with Thread Pool
+### Concurrent Map Helpers
 
 ```python
-from concurrent.futures import ThreadPoolExecutor
-from functools import partial
-from random import random
-from time import sleep
-from tldm import tldm
+from tldm.extensions.concurrent import process_map, thread_map
 
-def worker(n):
-    interval = random() * 0.01
-    total = 100
-    for _ in tldm(range(total), desc=f"Task #{n}", position=n):
-        sleep(interval)
-    return n + 1
-
-if __name__ == '__main__':
-    with ThreadPoolExecutor(max_workers=4) as executor:
-        results = list(executor.map(worker, range(4)))
+thread_results = thread_map(fetch_row, rows, desc="threaded", max_workers=8)
+process_results = process_map(score_row, rows, desc="scored", max_workers=4, chunksize=32)
 ```
+
+Use `thread_map(...)` for I/O-heavy work and `process_map(...)` for CPU-bound tasks. For large iterables, explicitly setting `chunksize` on `process_map(...)` avoids excessive dispatch overhead.
 
 ### Custom Prefix and Units
 
@@ -195,6 +213,37 @@ for i in tldm(range(100), desc="Processing", unit="files"):
 for i in tldm(range(1000000), unit="B", unit_scale=True, unit_divisor=1024):
     pass  # This will show KB, MB, etc.
 ```
+
+### Asyncio Gather with Ordered Results
+
+```python
+import asyncio
+from tldm.extensions.asyncio import tldm_asyncio
+
+async def fetch(i):
+    await asyncio.sleep(0.05)
+    return i * 2
+
+async def main():
+    results = await tldm_asyncio.gather(*(fetch(i) for i in range(8)), desc="fetch")
+    print(results)
+
+asyncio.run(main())
+```
+
+`gather(...)` preserves the original ordering of the awaitables, while `tldm_asyncio.as_completed(...)` is available when you want to consume results as soon as they finish.
+
+### Batched Inference or API Calls
+
+```python
+from tldm import tbatched
+
+for batch in tbatched(records, 32, desc="embed batches"):
+    vectors = embed_batch(batch)
+    store_vectors(vectors)
+```
+
+This is useful for workloads that already run in batches, such as inference, ETL, or rate-limited API calls. `tbatched(...)` requires Python 3.12+ because it builds on `itertools.batched`.
 
 ### Training Loop with Metrics and Sections
 
@@ -683,9 +732,20 @@ for batch in tbatched(range(10), 3):
 
 ## Extensions
 
-> **Note:** Extension support is still a work in progress. The core library focuses on command-line use cases.
+TL;DM ships with several environment-aware helpers and optional integrations. Some live in `tldm.extensions`, while others are exposed directly from the top-level package for convenience.
 
-This tldm implementation includes several extension modules located in `tldm.extensions`:
+### Notebook Support
+
+Install `tldm[notebook]` to enable widget-based rendering in Jupyter or IPython.
+
+`auto_tldm`, `trange`, `tenumerate`, `tzip`, `tmap`, `tproduct`, `tbatched`, and `tldm.pandas()` automatically select notebook widgets when `ipywidgets` is available. To force the widget backend explicitly, import the notebook class directly:
+
+```python
+from tldm.notebook import tldm as notebook_tldm
+
+for row in notebook_tldm(records, desc="EDA"):
+    inspect(row)
+```
 
 ### Asyncio
 
@@ -713,6 +773,26 @@ with tldm_asyncio(range(100)) as pbar:
             break
 ```
 
+There are also wrappers for the two most common task-orchestration patterns in `asyncio`:
+
+```python
+import asyncio
+from tldm.extensions.asyncio import tldm_asyncio
+
+async def fetch(i):
+    await asyncio.sleep(0.05)
+    return i
+
+async def main():
+    ordered = await tldm_asyncio.gather(*(fetch(i) for i in range(8)), desc="gather")
+    print(ordered)
+
+    for task in tldm_asyncio.as_completed([fetch(i) for i in range(8)], desc="ready"):
+        print(await task)
+
+asyncio.run(main())
+```
+
 ### Pandas Integration
 
 Apply tldm to pandas operations. There are multiple ways to register the pandas integration:
@@ -720,9 +800,9 @@ Apply tldm to pandas operations. There are multiple ways to register the pandas 
 **Using the syntactic sugar (recommended):**
 
 ```python
-import pandas as pd
 import numpy as np
-from tldm import tldm
+import pandas as pd
+import tldm
 
 # Register pandas integration - simple and clean!
 tldm.pandas(desc="Processing")
@@ -759,6 +839,19 @@ tldm_pandas(desc="Processing")
 
 The pandas integration automatically uses the appropriate progress bar for your environment (terminal or Jupyter notebook).
 
+Registration adds `progress_apply`, `progress_map`, `progress_applymap`, `progress_aggregate`, and `progress_transform`, along with rolling/expanding `progress_apply` helpers.
+
+```python
+from tldm import pandas
+
+pandas(desc="features")
+
+df["score_pct"] = df.groupby("team")["score"].progress_transform(
+    lambda group: group.rank(pct=True)
+)
+df["rolling_mean"] = df["score"].rolling(128).progress_apply(lambda window: window.mean())
+```
+
 ### Rich Integration
 
 Integration with the `rich` library for enhanced terminal output:
@@ -769,6 +862,8 @@ from tldm.extensions.rich import tldm
 for i in tldm(range(100)):
     pass
 ```
+
+Install `rich` separately if you want this backend. The rich renderer is a good fit when you want Rich-native terminal output, but it intentionally does not support `position` or custom `bar_format`, so keep the standard backend for those cases.
 
 ### Concurrent Processing
 
@@ -783,6 +878,8 @@ results = thread_map(lambda x: x**2, range(100), max_workers=4)
 # Process-based parallel processing with progress bar
 results = process_map(lambda x: x**2, range(100), max_workers=4)
 ```
+
+Both helpers accept the usual `tldm` keyword arguments such as `desc`, `total`, and `disable`, plus executor-specific arguments like `max_workers`, `timeout`, and `chunksize`.
 
 ### Logging Integration
 
@@ -809,6 +906,7 @@ The `logging_redirect_tldm()` context manager redirects console logging to `tldm
 - Removes console handlers (stdout/stderr) from loggers
 - Adds a `TldmLoggingHandler` that writes via `tldm.write()`
 - Preserves formatters and log levels from the original console handlers
+- Preserves filters on the redirected console handler
 - Restores original handlers when exiting the context
 
 You can also combine progress bars with logging redirection using `tldm_logging_redirect()`:
@@ -855,17 +953,17 @@ with trange(10) as t:
         sleep(0.1)
 ```
 
-    The higher-level metric and timing helpers build on the same display surface:
+The higher-level metric and timing helpers build on the same display surface:
 
-    ```python
-    from tldm import tldm
+```python
+from tldm import tldm
 
-    with tldm(range(5), metric_window=3, desc="debug") as pbar:
-      for step in pbar:
+with tldm(range(5), metric_window=3, desc="debug") as pbar:
+    for step in pbar:
         with pbar.section("work"):
-          value = run_step(step)
+            value = run_step(step)
         pbar.set_metrics(loss=value, refresh=False)
-    ```
+```
 
 You can also use a custom `bar_format`:
 
