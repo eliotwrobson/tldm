@@ -1547,7 +1547,9 @@ class tldm(Generic[T]):
         timings = defaultdict(_default_timing_stats, self.timings)
         rate = self._ema_dn() / self._ema_dt() if self._ema_dt() else None  # type: ignore[call-arg]
         elapsed = self._time() - self.start_t if hasattr(self, "start_t") else 0
-        remaining_s = max((self.total - self.n + self.initial) / rate, 0) if rate and self.total else 0
+        remaining_s = (
+            max((self.total - self.n + self.initial) / rate, 0) if rate and self.total else 0
+        )
         if rate and self.total is not None and self.eta_smoothing:
             remaining_s = self._ema_eta(remaining_s)
         eta = (
