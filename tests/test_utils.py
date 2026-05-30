@@ -191,6 +191,7 @@ def test_format_meter() -> None:
         format_meter(20, 100, 12, ncols=6, rate=8.1, bar_format=r"{bar}|test")
         == chr(0x258F) + "|test"
     )
+    assert "<00:05," in format_meter(50, 100, 5, rate=10, remaining_s=5)
 
 
 def test_format_num() -> None:

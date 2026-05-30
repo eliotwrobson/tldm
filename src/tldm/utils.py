@@ -608,6 +608,7 @@ def format_meter(
     initial: float | int = 0,
     colour: str | None = None,
     title: bool = False,
+    remaining_s: float | None = None,
     **extra_kwargs: Any,
 ):
     """
@@ -669,6 +670,10 @@ def format_meter(
         The initial counter value [default: 0].
     colour  : str, optional
         Bar colour (e.g. 'green', '#00ff00').
+    remaining_s  : float, optional
+        Optional override for remaining seconds used for display and ETA
+        timestamp calculation. If omitted, remaining time is computed from
+        `elapsed`, `n`, `total`, and `rate`.
 
     Returns
     -------
@@ -731,7 +736,10 @@ def format_meter(
     with contextlib.suppress(TypeError):
         postfix = ", " + postfix if postfix else ""
 
-    remaining = elapsed / (n - initial) * (total - n + initial) if rate and total else 0
+    if remaining_s is not None:
+        remaining = remaining_s
+    else:
+        remaining = elapsed / (n - initial) * (total - n + initial) if rate and total else 0
     remaining_str = format_interval(remaining) if rate else "?"
     try:
         eta_dt = (

@@ -205,6 +205,11 @@ class tldm(Generic[T]):
         Exponential moving average smoothing factor for speed estimates
         (ignored in GUI mode). Ranges from 0 (average speed) to 1
         (current/instantaneous speed) [default: 0.3].
+    eta_smoothing  : float, optional
+        Exponential moving average smoothing factor for ETA display only.
+        Uses the raw ETA estimate as input and smooths the displayed
+        remaining time. Ranges from 0 (disabled) to 1 (fully reactive)
+        [default: 0].
     bar_format  : str, optional
         Specify a custom bar string formatting. May impact performance.
         [default: '{l_bar}{bar}{r_bar}'], where
@@ -444,6 +449,7 @@ class tldm(Generic[T]):
         unit_scale: bool = False,
         dynamic_ncols: bool = False,
         smoothing: float = 0.3,
+        eta_smoothing: float = 0.0,
         bar_format: str | None = None,
         initial: float | int = 0,
         position: int | None = None,
@@ -545,9 +551,11 @@ class tldm(Generic[T]):
         if dynamic_ncols_func:
             self._register_resize_handler()
         self.smoothing = smoothing
+        self.eta_smoothing = eta_smoothing
         self._ema_dn = get_ema_func(smoothing)
         self._ema_dt = get_ema_func(smoothing)
         self._ema_miniters = get_ema_func(smoothing)
+        self._ema_eta = get_ema_func(eta_smoothing)
         self.bar_format = bar_format
         self.postfix = None
         self.metrics: dict[str, Any] = {}
@@ -1183,6 +1191,7 @@ class tldm(Generic[T]):
         self._ema_dn = get_ema_func(self.smoothing)
         self._ema_dt = get_ema_func(self.smoothing)
         self._ema_miniters = get_ema_func(self.smoothing)
+        self._ema_eta = get_ema_func(self.eta_smoothing)
         self.metrics = {}
         self.metrics_raw = {}
         self.metrics_fmt = ""
@@ -1535,10 +1544,17 @@ class tldm(Generic[T]):
         metrics = defaultdict(float, self.metrics)
         metrics_raw = defaultdict(float, self.metrics_raw)
         timings = defaultdict(_default_timing_stats, self.timings)
+        rate = self._ema_dn() / self._ema_dt() if self._ema_dt() else None  # type: ignore[call-arg]
+        elapsed = self._time() - self.start_t if hasattr(self, "start_t") else 0
+        remaining_s = None
+        if rate and self.total is not None:
+            remaining_s = max((self.total - self.n + self.initial) / rate, 0)
+            if self.eta_smoothing:
+                remaining_s = self._ema_eta(remaining_s)
         return {
             "n": self.n,
             "total": self.total,
-            "elapsed": self._time() - self.start_t if hasattr(self, "start_t") else 0,
+            "elapsed": elapsed,
             "cpu_elapsed": format_interval(cpu_elapsed_s) if cpu_elapsed_s is not None else None,
             "cpu_elapsed_s": cpu_elapsed_s,
             "ncols": self.ncols,
@@ -1547,9 +1563,11 @@ class tldm(Generic[T]):
             "ascii": self.ascii,
             "unit": self.unit,
             "unit_scale": self.unit_scale,
-            "rate": self._ema_dn() / self._ema_dt() if self._ema_dt() else None,  # type: ignore[call-arg]
+            "rate": rate,
             "bar_format": self.bar_format,
             "postfix": display_postfix,
+            "eta_smoothing": self.eta_smoothing,
+            "remaining_s": remaining_s,
             "active_phase": active_phase,
             "throughput": throughput,
             "throughput_raw": throughput_raw,

@@ -38,6 +38,7 @@ RE_rate = re.compile(r"[^\d](\d[.\d]+)it/s")
 RE_ctrlchr = re.compile("(%s)" % "|".join(CTRLCHR))  # Match control chars
 RE_ctrlchr_excl = re.compile("|".join(CTRLCHR))  # Match and exclude ctrl chars
 RE_pos = re.compile(r"([\r\n]+((pos\d+) bar:\s+\d+%|\s{3,6})?[^\r\n]*)")
+RE_float = re.compile(r"(-?\d+\.\d+)")
 
 
 class DummyTldmFile(ObjectWrapper):
@@ -171,6 +172,13 @@ def get_bar(all_bars, i=None):
 
 def progressbar_rate(bar_str):
     return float(RE_rate.search(bar_str).group(1))
+
+
+def progressbar_float(bar_str):
+    match = RE_float.search(bar_str)
+    if match is None:
+        raise AssertionError(f"Could not parse float from bar output: {bar_str!r}")
+    return float(match.group(1))
 
 
 def squash_ctrlchars(s):
@@ -1109,6 +1117,79 @@ def test_eta(capsys):
         pass
     _, err = capsys.readouterr()
     assert f"\r100%|{dt.now():%Y-%m-%d}\n" in err
+
+
+def test_eta_smoothing() -> None:
+    """Test that eta_smoothing reduces ETA volatility in bursty streams."""
+
+    def get_remaining_series(eta_smoothing: float | None) -> list[float]:
+        timer = DiscreteTimer()
+        delays = [0.80, 0.05, 0.70, 0.05, 0.60, 0.05, 0.50, 0.05]
+        kwargs = {} if eta_smoothing is None else {"eta_smoothing": eta_smoothing}
+
+        with closing(StringIO()) as our_file:
+            with tldm(
+                total=len(delays),
+                file=our_file,
+                miniters=1,
+                mininterval=0,
+                leave=True,
+                smoothing=1,
+                bar_format="{remaining_s:.6f}",
+                **kwargs,
+            ) as t:
+                cpu_timify(t, timer)
+                for dt in delays:
+                    timer.sleep(dt)
+                    t.update()
+
+            bars = get_bar(our_file.getvalue())
+            return [progressbar_float(bar) for bar in bars if RE_float.search(bar)]
+
+    def volatility(series: list[float]) -> tuple[float, float]:
+        deltas = [abs(cur - prev) for prev, cur in zip(series, series[1:])]
+        return max(deltas), sum(deltas)
+
+    def peak_after_warmup(series: list[float]) -> float:
+        deltas = [abs(cur - prev) for prev, cur in zip(series, series[1:])]
+        return max(deltas[1:]) if len(deltas) > 1 else max(deltas)
+
+    default_series = get_remaining_series(None)
+    disabled_series = get_remaining_series(0.0)
+    assert default_series == disabled_series
+
+    unsmoothed = get_remaining_series(0.0)
+    smoothed = get_remaining_series(0.3)
+
+    _, unsmoothed_total = volatility(unsmoothed)
+    _, smoothed_total = volatility(smoothed)
+
+    assert peak_after_warmup(smoothed) < peak_after_warmup(unsmoothed)
+    assert smoothed_total < unsmoothed_total
+
+
+def test_eta_smoothing_reset() -> None:
+    """Test ETA smoothing state is reset by reset()."""
+    timer = DiscreteTimer()
+
+    with closing(StringIO()) as our_file:
+        with tldm(
+            total=4,
+            file=our_file,
+            miniters=1,
+            mininterval=0,
+            leave=True,
+            smoothing=1,
+            eta_smoothing=0.8,
+            bar_format="{remaining_s:.6f}",
+        ) as t:
+            cpu_timify(t, timer)
+            timer.sleep(0.5)
+            t.update()
+
+            assert t._ema_eta() > 0
+            t.reset(total=4)
+            assert t._ema_eta() == 0
 
 
 def test_unpause() -> None:
