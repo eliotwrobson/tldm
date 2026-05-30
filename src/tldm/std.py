@@ -9,6 +9,7 @@ import sys
 from collections import OrderedDict, defaultdict, deque
 from collections.abc import Iterable, Iterator
 from contextlib import AbstractContextManager, contextmanager, suppress
+from datetime import UTC, datetime, timedelta
 from functools import total_ordering
 from multiprocessing import RLock
 from numbers import Number, Real
@@ -1546,11 +1547,20 @@ class tldm(Generic[T]):
         timings = defaultdict(_default_timing_stats, self.timings)
         rate = self._ema_dn() / self._ema_dt() if self._ema_dt() else None  # type: ignore[call-arg]
         elapsed = self._time() - self.start_t if hasattr(self, "start_t") else 0
-        remaining_s = None
+        remaining_s = max((self.total - self.n + self.initial) / rate, 0) if rate and self.total else 0
+        if rate and self.total is not None and self.eta_smoothing:
+            remaining_s = self._ema_eta(remaining_s)
+        eta = (
+            datetime.now() + timedelta(seconds=remaining_s)
+            if rate and self.total is not None
+            else datetime.fromtimestamp(0, UTC)
+        )
         if rate and self.total is not None:
-            remaining_s = max((self.total - self.n + self.initial) / rate, 0)
-            if self.eta_smoothing:
-                remaining_s = self._ema_eta(remaining_s)
+            self._last_eta = eta
+        elif self.total is not None and self.n >= self.total and hasattr(self, "_last_eta"):
+            eta = self._last_eta
+        else:
+            self._last_eta = eta
         return {
             "n": self.n,
             "total": self.total,
@@ -1568,6 +1578,7 @@ class tldm(Generic[T]):
             "postfix": display_postfix,
             "eta_smoothing": self.eta_smoothing,
             "remaining_s": remaining_s,
+            "eta": eta,
             "active_phase": active_phase,
             "throughput": throughput,
             "throughput_raw": throughput_raw,

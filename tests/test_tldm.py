@@ -1192,6 +1192,23 @@ def test_eta_smoothing_reset() -> None:
             assert t._ema_eta() == 0
 
 
+def test_eta_smoothing_last_eta_fallback() -> None:
+    """Test ETA remains stable at completion when instantaneous rate is unavailable."""
+    timer = DiscreteTimer()
+
+    with closing(StringIO()) as our_file:
+        with tldm(total=2, file=our_file, miniters=1, mininterval=0, leave=True) as t:
+            cpu_timify(t, timer)
+            timer.sleep(0.2)
+            t.update()
+            timer.sleep(0.2)
+            t.update()
+
+            expected_eta = t.format_dict["eta"]
+            t._ema_dt = lambda _=None: 0.0
+            assert t.format_dict["eta"] == expected_eta
+
+
 def test_unpause() -> None:
     """
     Test unpause
