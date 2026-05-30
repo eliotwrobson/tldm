@@ -354,9 +354,10 @@ This pattern works well with AI-generated scripts because the interesting state 
 - **eta_smoothing** : float, optional
   Exponential moving average smoothing factor for ETA display only. Ranges from 0 (disabled) to 1 (fully reactive) [default: 0]. This smooths the displayed remaining time without changing update cadence or iteration counting.
 
-#### EMA Smoothing Guide
+<details>
+<summary>EMA smoothing guide</summary>
 
-`tldm` now supports two EMA-based smoothing controls with different goals:
+`tldm` supports two EMA-based smoothing controls with different goals:
 
 - `smoothing` smooths **rate** (it/s or s/it), which then affects ETA indirectly.
 - `eta_smoothing` smooths **ETA display** (`remaining` / `remaining_s`) directly.
@@ -368,6 +369,8 @@ In practice:
 - Keep `eta_smoothing=0` for fully raw ETA behavior (default/backward-compatible behavior).
 
 Tradeoff: stronger smoothing makes output steadier but introduces a small lag after sudden speed changes.
+
+</details>
 
 - **bar_format** : str, optional
   Specify a custom bar string format. May impact performance.
