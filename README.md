@@ -351,6 +351,24 @@ This pattern works well with AI-generated scripts because the interesting state 
 - **smoothing** : float, optional
   Exponential moving average smoothing factor for speed estimates (ignored in GUI mode). Ranges from 0 (average speed) to 1 (current/instantaneous speed) [default: 0.3].
 
+- **eta_smoothing** : float, optional
+  Exponential moving average smoothing factor for ETA display only. Ranges from 0 (disabled) to 1 (fully reactive) [default: 0]. This smooths the displayed remaining time without changing update cadence or iteration counting.
+
+#### EMA Smoothing Guide
+
+`tldm` now supports two EMA-based smoothing controls with different goals:
+
+- `smoothing` smooths **rate** (it/s or s/it), which then affects ETA indirectly.
+- `eta_smoothing` smooths **ETA display** (`remaining` / `remaining_s`) directly.
+
+In practice:
+
+- Use a higher `smoothing` when you want rate to react quickly to recent changes.
+- Use `eta_smoothing` when throughput is bursty (downloads, streaming, mixed I/O) and ETA jumps around too much.
+- Keep `eta_smoothing=0` for fully raw ETA behavior (default/backward-compatible behavior).
+
+Tradeoff: stronger smoothing makes output steadier but introduces a small lag after sudden speed changes.
+
 - **bar_format** : str, optional
   Specify a custom bar string format. May impact performance.
 
