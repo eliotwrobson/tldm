@@ -822,7 +822,7 @@ def format_meter(
         bar_replacer = FormatReplace()
         nobar = bar_format.format(bar=bar_replacer, **format_dict)
         if not bar_replacer.format_called:
-            return nobar  # no `{bar}`; nothing else to do
+            return disp_trim(nobar, ncols) if ncols else nobar
 
         # Formatting progress bar space available for bar's display
         full_bar = Bar(
@@ -844,7 +844,7 @@ def format_meter(
         bar_replacer = FormatReplace()
         nobar = bar_format.format(bar=bar_replacer, **format_dict)
         if not bar_replacer.format_called:
-            return nobar
+            return disp_trim(nobar, ncols) if ncols else nobar
 
         full_bar = Bar(
             0,
@@ -856,10 +856,11 @@ def format_meter(
         return disp_trim(res, ncols) if ncols else res
     else:
         # no total: no progressbar, ETA, just progress stats
-        return (
+        meter = (
             f"{(prefix + ': ') if prefix else ''}"
             f"{n_fmt}{unit} [{elapsed_str}, {rate_fmt}{postfix}]"
         )
+        return disp_trim(meter, ncols) if ncols else meter
 
 
 def _resize_signal_handler(signalnum, frame):

@@ -191,6 +191,17 @@ def test_format_meter() -> None:
         format_meter(20, 100, 12, ncols=6, rate=8.1, bar_format=r"{bar}|test")
         == chr(0x258F) + "|test"
     )
+    # Check ncols trimming when `{bar}` is not used in bar_format
+    long_desc = "x" * 50
+    # known total, no `{bar}`
+    assert format_meter(1, 100, 12, ncols=10, bar_format="{desc}", prefix=long_desc) == "x" * 10
+    # no total, no `{bar}`
+    assert format_meter(1, None, 12, ncols=10, bar_format="{desc}", prefix=long_desc) == "x" * 10
+    # no total, default stats line still respects ncols
+    assert len(format_meter(1, None, 12, ncols=10)) == 10
+    # no trimming when ncols is unset or intentionally zero
+    assert format_meter(1, 100, 12, ncols=None, bar_format="{desc}", prefix=long_desc) == long_desc
+    assert format_meter(1, None, 12, ncols=0, bar_format="{desc}", prefix=long_desc) == long_desc
     assert "<00:05," in format_meter(50, 100, 5, rate=10, remaining_s=5)
 
 
