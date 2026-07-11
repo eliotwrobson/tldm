@@ -2696,3 +2696,13 @@ def test_contains(capsys):
     assert not out
     assert "  0%" in err
     assert "100%" not in err
+
+
+def test_write_stdout_none() -> None:
+    """Test tldm.write does not crash when sys.stdout is None."""
+    orig_stdout = sys.stdout
+    try:
+        sys.stdout = None
+        tldm.write("test")
+    finally:
+        sys.stdout = orig_stdout

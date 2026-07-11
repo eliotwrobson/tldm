@@ -356,6 +356,8 @@ class tldm(Generic[T]):
     ) -> None:
         """Print a message via tldm (without overlap with bars)."""
         fp = file if file is not None else sys.stdout
+        if fp is None:
+            return
         with cls.external_write_mode(file=file, nolock=nolock):
             # Write the message
             fp.write(s)
