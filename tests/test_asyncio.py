@@ -152,3 +152,38 @@ async def test_gather(capsys):
 
     with raises(TypeError):
         await gather(*map(double, range(30)), double(time))
+
+
+class AsyncIterable:
+    """Async iterable with only __aiter__ on the iterable object."""
+
+    def __init__(self, items):
+        self._items = items
+
+    def __aiter__(self):
+        return AsyncIterableIterator(self._items)
+
+
+class AsyncIterableIterator:
+    def __init__(self, items):
+        self._items = iter(items)
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        try:
+            return next(self._items)
+        except StopIteration:
+            raise StopAsyncIteration from None
+
+
+@mark.asyncio
+async def test_async_iterable_aiter_only():
+    """Test asyncio with iterable implementing only __aiter__."""
+    with closing(StringIO()) as our_file:
+        result = []
+        async for i in tldm(AsyncIterable(range(9)), total=9, desc="aiterable", file=our_file):
+            result.append(i)
+        assert result == list(range(9))
+        assert "9/9" in our_file.getvalue()

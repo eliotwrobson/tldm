@@ -127,6 +127,9 @@ class tldm_notebook(std_tldm):
         # goal is to keep all infos if error happens so user knows
         # at which iteration the loop failed.
 
+        if self.disable:
+            return False
+
         if not msg and not close:
             d = self.format_dict
             # remove {bar}

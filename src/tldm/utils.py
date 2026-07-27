@@ -681,7 +681,10 @@ def format_meter(
     """
 
     # sanity check: total
-    if total and n >= (total + 0.5):  # allow float imprecision (#849)
+    if total == float("inf"):
+        # Infinite total behaves like unknown total.
+        total = None
+    elif total and n >= (total + 0.5):  # allow float imprecision (#849)
         total = None
 
     # apply custom scale if necessary

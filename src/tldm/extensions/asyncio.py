@@ -19,8 +19,15 @@ class tldm_asyncio(std_tldm):
             if hasattr(iterable, "__anext__"):
                 self.iterable_next = iterable.__anext__
                 self.iterable_awaitable = True
+            elif hasattr(iterable, "__aiter__"):
+                self.iterable_iterator = iterable.__aiter__()
+                self.iterable_next = self.iterable_iterator.__anext__
+                self.iterable_awaitable = True
             elif hasattr(iterable, "__next__"):
                 self.iterable_next = iterable.__next__
+            else:
+                self.iterable_iterator = iter(iterable)
+                self.iterable_next = self.iterable_iterator.__next__
 
     def __aiter__(self):
         return self
@@ -38,9 +45,6 @@ class tldm_asyncio(std_tldm):
             if self.iterable_awaitable:
                 res = await self.iterable_next()
             else:
-                if not hasattr(self, "iterable_iterator"):
-                    self.iterable_iterator = iter(self.iterable)
-                    self.iterable_next = self.iterable_iterator.__next__
                 res = self.iterable_next()
             self.update()
             return res

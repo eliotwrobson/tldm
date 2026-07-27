@@ -117,7 +117,7 @@ class TldmDefaultWriteLock:
         self.release()
 
     def __del__(self) -> None:
-        if TldmDefaultWriteLock.mp_lock is not None:
+        if getattr(TldmDefaultWriteLock, "mp_lock", None) is not None:
             del TldmDefaultWriteLock.mp_lock
 
     @classmethod
