@@ -159,7 +159,8 @@ pbar.close()
 - `set_metrics(...)`, `set_throughput(...)`, `mark(...)`, and `section(...)` turn a progress bar into a lightweight training or pipeline dashboard.
 - `summary=True` and `summary_dict()` keep the live bar concise while still giving you structured end-of-run metrics and timing data.
 - `training_tldm(...)` manages nested epoch and step bars with shared metrics, throughput, and phase timing helpers.
-- `tldm_asyncio.gather(...)`, `tldm_asyncio.as_completed(...)`, `thread_map(...)`, and `process_map(...)` cover common async and concurrent execution patterns.
+- `tldm_asyncio` supports async iterables that expose `__anext__` directly or only `__aiter__`, and includes `gather(...)` / `as_completed(...)` helpers.
+- `thread_map(...)` and `process_map(...)` support common executor controls such as `max_workers`, `timeout`, `chunksize`, `buffersize`, `thread_name_prefix`, `max_tasks_per_child`, and `mp_context`.
 - `auto_tldm`, `trange`, the iterator helpers, and `tldm.pandas()` automatically select notebook widgets when `ipywidgets` is available.
 
 ---
@@ -772,6 +773,8 @@ for row in notebook_tldm(records, desc="EDA"):
 
 Asynchronous-friendly version of tldm for use with `async`/`await`:
 
+`tldm_asyncio` accepts async iterables that implement either `__anext__` or only `__aiter__`.
+
 ```python
 from tldm.extensions.asyncio import tldm_asyncio
 import asyncio
@@ -900,7 +903,9 @@ results = thread_map(lambda x: x**2, range(100), max_workers=4)
 results = process_map(lambda x: x**2, range(100), max_workers=4)
 ```
 
-Both helpers accept the usual `tldm` keyword arguments such as `desc`, `total`, and `disable`, plus executor-specific arguments like `max_workers`, `timeout`, and `chunksize`.
+Both helpers accept the usual `tldm` keyword arguments such as `desc`, `total`, and `disable`, plus executor-specific arguments like `max_workers`, `timeout`, `chunksize`, `thread_name_prefix`, `max_tasks_per_child`, and `mp_context`.
+
+`buffersize` is also supported on Python 3.14+ (matching the stdlib executors). If `total` is not provided, these helpers infer it from iterable length hints when available, and continue to work with iterables that do not expose a known length.
 
 ### Logging Integration
 
